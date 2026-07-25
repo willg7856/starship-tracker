@@ -193,8 +193,8 @@ function App() {
                 >
                   Space Notices
                 </a>{' '}
-                ({drift.baseline}). The dotted path after the archive grows from
-                each new SpaceX fix (~every 10s) and is kept in this browser.
+                ({drift.baseline}). The path after the archive grows from each
+                new SpaceX fix (~every 10s) and is kept in this browser.
               </p>
             )}
 
