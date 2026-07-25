@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  appendLiveFix,
+  loadLiveTrail,
+  saveLiveTrail,
+  type LiveTrailPoint,
+} from '../lib/liveTrail'
+import {
   fetchMissionSummary,
   fetchShip40Tracker,
   type MissionSummary,
@@ -15,6 +21,8 @@ export type TrackerState = {
   error: string | null
   loading: boolean
   refreshing: boolean
+  /** Accumulated near-surface SpaceX fixes since this browser started tracking. */
+  liveTrail: LiveTrailPoint[]
 }
 
 export function useShip40(): TrackerState {
@@ -24,6 +32,7 @@ export function useShip40(): TrackerState {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [liveTrail, setLiveTrail] = useState<LiveTrailPoint[]>(() => loadLiveTrail())
   const hasLoaded = useRef(false)
 
   useEffect(() => {
@@ -49,6 +58,12 @@ export function useShip40(): TrackerState {
         setError(null)
         if (missionSummary) setMission(missionSummary)
         hasLoaded.current = true
+
+        setLiveTrail((prev) => {
+          const next = appendLiveFix(prev, nextShip.current)
+          if (next !== prev) saveLiveTrail(next)
+          return next
+        })
       } catch (err) {
         if (cancelled || controller.signal.aborted) return
         const message =
@@ -72,5 +87,5 @@ export function useShip40(): TrackerState {
     }
   }, [])
 
-  return { ship, mission, fetchedAt, error, loading, refreshing }
+  return { ship, mission, fetchedAt, error, loading, refreshing, liveTrail }
 }

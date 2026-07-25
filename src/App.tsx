@@ -19,7 +19,8 @@ import {
 } from './lib/spacex'
 
 function App() {
-  const { ship, mission, fetchedAt, error, loading, refreshing } = useShip40()
+  const { ship, mission, fetchedAt, error, loading, refreshing, liveTrail } =
+    useShip40()
 
   const current = ship?.current
   const place = useMemo(() => {
@@ -130,7 +131,7 @@ function App() {
       <section className="map-section" aria-label="Ship 40 map">
         <div className="map-frame">
           {current && ship ? (
-            <TrackMap ship={ship} />
+            <TrackMap ship={ship} liveTrail={liveTrail} />
           ) : (
             <div className="map-skeleton">
               {error ? <p>{error}</p> : <p>Acquiring SpaceX telemetry…</p>}
@@ -183,8 +184,8 @@ function App() {
 
             {drift && (
               <p className="drift-note">
-                Drift is live SpaceX position minus the splashdown fix archived
-                by{' '}
+                Drift distance is live SpaceX position minus the splashdown fix
+                archived by{' '}
                 <a
                   href="https://space-notices.com/entry/launch-starship-flight-13"
                   target="_blank"
@@ -192,8 +193,8 @@ function App() {
                 >
                   Space Notices
                 </a>{' '}
-                ({drift.baseline}) — the first near-surface tracker sample after
-                reentry.
+                ({drift.baseline}). The dotted path after the archive grows from
+                each new SpaceX fix (~every 10s) and is kept in this browser.
               </p>
             )}
 

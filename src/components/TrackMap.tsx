@@ -17,12 +17,14 @@ import {
   buildFlightPath,
   getNoticePolygons,
 } from '../data/flight13Path'
+import type { LiveTrailPoint } from '../lib/liveTrail'
 import { formatLatLon, isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
 
 type Props = {
   ship: ShipTrack
+  liveTrail?: LiveTrailPoint[]
 }
 
 type ViewMode = 'drift' | 'flight'
@@ -92,7 +94,7 @@ function FitBoundsOnModeChange({
   return null
 }
 
-export function TrackMap({ ship }: Props) {
+export function TrackMap({ ship, liveTrail = [] }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
   const landed = isNearSurface(current.altitude)
@@ -102,22 +104,45 @@ export function TrackMap({ ship }: Props) {
   const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
   const notices = useMemo(() => getNoticePolygons(), [])
 
-  // Archived ocean-drift track + live tip for close-up framing at mode switch.
+  // Live SpaceX fixes accumulated while this browser has been polling.
+  const livePath = useMemo(() => {
+    const pts: Array<[number, number]> = liveTrail.map((p) => [
+      p.latitude,
+      p.longitude,
+    ])
+    const tip: [number, number] = [current.latitude, current.longitude]
+    const last = pts[pts.length - 1]
+    if (
+      !last ||
+      Math.hypot(last[0] - tip[0], last[1] - tip[1]) > 1e-7
+    ) {
+      pts.push(tip)
+    }
+    return pts
+  }, [liveTrail, current.latitude, current.longitude])
+
+  // Archived ocean-drift + live trail for close-up framing at mode switch.
   const driftFrame = useMemo(() => {
     const pts: Array<[number, number]> = oceanDrift.length
       ? [...oceanDrift]
       : [[LANDING_FIX.lat, LANDING_FIX.lon]]
-    pts.push([current.latitude, current.longitude])
+    for (const p of livePath) pts.push(p)
     return pts
-  }, [oceanDrift, current.latitude, current.longitude])
+  }, [oceanDrift, livePath])
 
-  const liveDriftStub = useMemo(() => {
-    if (!landed || oceanDrift.length === 0) return null
-    const last = oceanDrift[oceanDrift.length - 1]
-    const live: [number, number] = [current.latitude, current.longitude]
-    if (Math.hypot(last[0] - live[0], last[1] - live[1]) < 1e-7) return null
-    return [last, live] as Array<[number, number]>
-  }, [landed, oceanDrift, current.latitude, current.longitude])
+  /**
+   * Bridge from the end of the archived drift path through every recorded
+   * live SpaceX fix (no longer a single straight stub to "now").
+   */
+  const liveDriftPath = useMemo(() => {
+    if (!landed || livePath.length === 0) return null
+    const pts: Array<[number, number]> = []
+    if (oceanDrift.length > 0) {
+      pts.push(oceanDrift[oceanDrift.length - 1])
+    }
+    for (const p of livePath) pts.push(p)
+    return pts.length >= 2 ? pts : null
+  }, [landed, oceanDrift, livePath])
 
   const view = landed ? mode : 'flight'
 
@@ -242,10 +267,10 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {/* Short stub from end of archive to current live fix */}
-        {liveDriftStub && (
+        {/* Live SpaceX trail after the archive (grows with each new fix) */}
+        {liveDriftPath && (
           <Polyline
-            positions={liveDriftStub}
+            positions={liveDriftPath}
             pathOptions={{
               color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
