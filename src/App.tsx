@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TrackMap } from './components/TrackMap'
+import { useRecoveryVessel } from './hooks/useRecoveryVessel'
 import { useShip40 } from './hooks/useShip40'
 import { LANDING_FIX } from './data/flight13Path'
 import {
@@ -30,6 +31,7 @@ function formatUpdateAge(seconds: number): string {
 
 function App() {
   const { ship, mission, fetchedAt, error, loading, liveTrail } = useShip40()
+  const { vessel } = useRecoveryVessel()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -150,7 +152,7 @@ function App() {
       <section className="map-section" aria-label="Ship 40 map">
         <div className="map-frame">
           {current && ship ? (
-            <TrackMap ship={ship} liveTrail={liveTrail} />
+            <TrackMap ship={ship} liveTrail={liveTrail} vessel={vessel} />
           ) : (
             <div className="map-skeleton">
               {error ? <p>{error}</p> : <p>Acquiring SpaceX telemetry…</p>}

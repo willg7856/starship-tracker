@@ -20,11 +20,13 @@ import {
 import type { LiveTrailPoint } from '../lib/liveTrail'
 import { formatLatLon, isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
+import type { RecoveryVessel } from '../lib/vessel'
 import 'leaflet/dist/leaflet.css'
 
 type Props = {
   ship: ShipTrack
   liveTrail?: LiveTrailPoint[]
+  vessel?: RecoveryVessel | null
 }
 
 type ViewMode = 'drift' | 'flight'
@@ -43,6 +45,13 @@ const landingIcon = L.divIcon({
   iconAnchor: [7, 7],
 })
 
+const boatIcon = L.divIcon({
+  className: 'path-marker boat-marker',
+  html: '<span></span>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+})
+
 /**
  * Fit the map once per view-mode change only.
  * Do NOT re-fit when live telemetry updates — that fights manual zoom.
@@ -52,20 +61,32 @@ function FitBoundsOnModeChange({
   fullPath,
   driftPoints,
   live,
+  vessel,
 }: {
   mode: ViewMode
   fullPath: Array<[number, number]>
   driftPoints: Array<[number, number]>
   live: LatLngExpression
+  vessel: LatLngExpression | null
 }) {
   const map = useMap()
   const fittedMode = useRef<ViewMode | null>(null)
+  const sawVessel = useRef(false)
   const fullPathRef = useRef(fullPath)
   const driftPointsRef = useRef(driftPoints)
   const liveRef = useRef(live)
+  const vesselRef = useRef(vessel)
   fullPathRef.current = fullPath
   driftPointsRef.current = driftPoints
   liveRef.current = live
+  vesselRef.current = vessel
+
+  // When AIS boat position first arrives, re-fit full-flight view once so it is on-screen.
+  useEffect(() => {
+    if (!vessel || sawVessel.current) return
+    sawVessel.current = true
+    if (fittedMode.current === 'flight') fittedMode.current = null
+  }, [vessel])
 
   useEffect(() => {
     if (fittedMode.current === mode) return
@@ -87,14 +108,15 @@ function FitBoundsOnModeChange({
     if (path.length >= 2) {
       const bounds = L.latLngBounds(path)
       bounds.extend(liveNow)
+      if (vesselRef.current) bounds.extend(vesselRef.current)
       map.fitBounds(bounds.pad(0.08), { animate: false })
     }
-  }, [mode, map])
+  }, [mode, map, vessel])
 
   return null
 }
 
-export function TrackMap({ ship, liveTrail = [] }: Props) {
+export function TrackMap({ ship, liveTrail = [], vessel = null }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
   const landed = isNearSurface(current.altitude)
@@ -145,6 +167,9 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
   }, [landed, oceanDrift, livePath])
 
   const view = landed ? mode : 'flight'
+  const vesselPos: LatLngExpression | null = vessel
+    ? [vessel.latitude, vessel.longitude]
+    : null
 
   return (
     <div className="map-shell">
@@ -195,6 +220,7 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
           fullPath={full}
           driftPoints={driftFrame}
           live={center}
+          vessel={vesselPos}
         />
 
         {/* Notice polygons only in full-flight view (they clutter the close-up). */}
@@ -297,6 +323,38 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
               {formatLatLon(LANDING_FIX.lat, LANDING_FIX.lon)}
               <br />
               First near-surface SpaceX fix
+            </Popup>
+          </Marker>
+        )}
+
+        {vessel && vesselPos && (
+          <Marker position={vesselPos} icon={boatIcon}>
+            <Popup>
+              <strong>{vessel.name}</strong>
+              <br />
+              MMSI {vessel.mmsi}
+              <br />
+              {formatLatLon(vessel.latitude, vessel.longitude)}
+              {vessel.speedKn != null ? (
+                <>
+                  <br />
+                  {vessel.speedKn.toFixed(1)} kn
+                </>
+              ) : null}
+              {vessel.ageMinutes != null ? (
+                <>
+                  <br />
+                  AIS ~{Math.max(0, Math.round(vessel.ageMinutes))} min ago
+                </>
+              ) : null}
+              <br />
+              <a
+                href={vessel.marinetrafficUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                MarineTraffic
+              </a>
             </Popup>
           </Marker>
         )}

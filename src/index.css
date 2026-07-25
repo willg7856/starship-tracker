@@ -435,6 +435,15 @@ select {
   box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.28);
 }
 
+.boat-marker span {
+  width: 14px;
+  height: 14px;
+  background: var(--cyan);
+  border-radius: 2px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 3px rgba(45, 194, 217, 0.28);
+}
+
 .leaflet-popup-content-wrapper {
   background: var(--ink) !important;
   color: var(--paper) !important;
