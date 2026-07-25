@@ -12,7 +12,6 @@ import {
 import L from 'leaflet'
 import type { LatLngExpression } from 'leaflet'
 import {
-  FLIGHT_PATH_SOURCE,
   LANDING_FIX,
   LAUNCH_PAD,
   buildFlightPath,
@@ -305,30 +304,6 @@ export function TrackMap({ ship }: Props) {
           }}
         />
       </MapContainer>
-
-      <p className="map-caption">
-        {view === 'drift' ? (
-          <>
-            Drift close-up — full Flight 13 path stays on the map (dimmed). Open
-            ring = splashdown; filled = live. Source:{' '}
-            <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
-              Space Notices
-            </a>
-            .
-          </>
-        ) : (
-          <>
-            Full Flight 13 tracker path from{' '}
-            <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
-              Space Notices
-            </a>{' '}
-            (liftoff → splashdown → ocean drift). Ignition orange = ascent /
-            reentry, amber = post-landing drift. Shaded = AHA / nav-warning
-            areas.
-          </>
-        )}{' '}
-        Scroll or +/− to zoom.
-      </p>
     </div>
   )
 }
