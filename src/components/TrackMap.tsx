@@ -96,7 +96,7 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
   const landed = isNearSurface(current.altitude)
-  const [mode, setMode] = useState<ViewMode>('flight')
+  const [mode, setMode] = useState<ViewMode>('drift')
 
   const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
 
