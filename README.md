@@ -6,19 +6,19 @@ Live location tracker for SpaceX **Ship 40** (Starship Flight 13), reading the s
 
 ## Data source
 
-Directly from SpaceX CDN (no scraping):
+SpaceX’s public tracker feed (no scraping):
 
 ```
 https://sxcontent9668.azureedge.us/cms-assets/starship_tracker_public.json
 ```
 
-Mission copy is loaded from SpaceX’s public CMS:
+Mission copy from SpaceX’s public CMS:
 
 ```
 https://content.spacex.com/api/spacex-website/missions/starship-flight-13
 ```
 
-The app polls the tracker about every 10 seconds (matching SpaceX’s own client).
+The browser calls same-origin `/api/tracker` and `/api/mission` proxies (Vercel serverless) because Azure CDN blocks cross-origin browser requests from custom domains. The app polls about every 10 seconds (matching SpaceX’s own client).
 
 ## Run locally
 

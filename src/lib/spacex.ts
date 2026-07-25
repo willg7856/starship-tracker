@@ -1,10 +1,10 @@
-/** Direct SpaceX public data sources used by spacex.com's vehicle tracker. */
+/**
+ * Browser calls same-origin API routes that proxy SpaceX's public feeds.
+ * Direct browser calls to Azure CDN fail CORS from custom domains.
+ */
 
-export const STARSHIP_TRACKER_URL =
-  'https://sxcontent9668.azureedge.us/cms-assets/starship_tracker_public.json'
-
-export const MISSION_URL =
-  'https://content.spacex.com/api/spacex-website/missions/starship-flight-13'
+export const STARSHIP_TRACKER_URL = '/api/tracker'
+export const MISSION_URL = '/api/mission'
 
 export const SPACEX_MISSION_PAGE =
   'https://www.spacex.com/launches/starship-flight-13'
@@ -66,7 +66,6 @@ export async function fetchShip40Tracker(
   const url = `${STARSHIP_TRACKER_URL}?t=${Date.now()}`
   const res = await fetch(url, {
     signal,
-    headers: { Accept: 'application/json' },
     cache: 'no-store',
   })
   if (!res.ok) {
@@ -84,10 +83,7 @@ export async function fetchMissionSummary(
   signal?: AbortSignal,
 ): Promise<MissionSummary | null> {
   try {
-    const res = await fetch(MISSION_URL, {
-      signal,
-      headers: { Accept: 'application/json' },
-    })
+    const res = await fetch(MISSION_URL, { signal })
     if (!res.ok) return null
     const data = await res.json()
     return {

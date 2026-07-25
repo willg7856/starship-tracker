@@ -108,7 +108,7 @@ function App() {
           </dl>
 
           <p className="source-line">
-            Source: sxcontent9668.azureedge.us/cms-assets/starship_tracker_public.json
+            Source: SpaceX starship_tracker_public.json via /api/tracker
             {stamp ? ` · GPS ${stamp}` : ''}
             {fetchedAt
               ? ` · polled ${fetchedAt.toLocaleTimeString('en-US', { timeZone: 'UTC' })} UTC`
