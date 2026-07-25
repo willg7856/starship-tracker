@@ -94,12 +94,12 @@ function App() {
     ? 'OFFLINE'
     : loading || !positionStillSince
       ? 'LINKING'
-      : formatUpdateAge(
+      : `LAST UPDATED ${formatUpdateAge(
           Math.max(
             0,
             Math.floor((nowMs - positionStillSince.getTime()) / 1000),
           ),
-        )
+        )}`
 
   return (
     <div className="app">
