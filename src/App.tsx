@@ -13,7 +13,6 @@ import {
   formatLatLon,
   formatMissionClock,
   formatSpeedKmh,
-  gpsTimeToDate,
   haversineKm,
   isNearSurface,
 } from './lib/spacex'
@@ -46,13 +45,24 @@ function App() {
   }, [])
 
   const current = ship?.current
+
+  // Tick mission clock every second between SpaceX polls.
+  const liveMissionTime = useMemo(() => {
+    if (!current) return null
+    if (!fetchedAt) return current.mission_time
+    const elapsedS = Math.max(0, (nowMs - fetchedAt.getTime()) / 1000)
+    return current.mission_time + elapsedS
+  }, [current, fetchedAt, nowMs])
+
   const place = useMemo(() => {
     if (!current) return null
     return describeLocation(current.latitude, current.longitude, current.altitude)
   }, [current])
 
   const drift = useMemo(() => {
-    if (!current || !isNearSurface(current.altitude)) return null
+    if (!current || liveMissionTime == null || !isNearSurface(current.altitude)) {
+      return null
+    }
     const km = haversineKm(
       LANDING_FIX.lat,
       LANDING_FIX.lon,
@@ -67,7 +77,7 @@ function App() {
     )
     const driftingSeconds = Math.max(
       0,
-      current.mission_time - SPLASHDOWN_MISSION_TIME,
+      liveMissionTime - SPLASHDOWN_MISSION_TIME,
     )
     return {
       label: formatDriftDistance(km),
@@ -77,26 +87,19 @@ function App() {
           : formatBearingCardinal(bearing),
       duration: formatDriftDuration(driftingSeconds),
     }
-  }, [current])
+  }, [current, liveMissionTime])
 
-  const lastUpdateAt = current ? gpsTimeToDate(current.gps_time) : fetchedAt
+  // Nav age = time since lat/lon last changed (not feed clock ticks).
   const liveLabel = error
     ? 'OFFLINE'
-    : loading || !lastUpdateAt
+    : loading || !positionStillSince
       ? 'LINKING'
       : formatUpdateAge(
-          Math.max(0, Math.floor((nowMs - lastUpdateAt.getTime()) / 1000)),
+          Math.max(
+            0,
+            Math.floor((nowMs - positionStillSince.getTime()) / 1000),
+          ),
         )
-
-  const positionStillSeconds = positionStillSince
-    ? Math.max(0, Math.floor((nowMs - positionStillSince.getTime()) / 1000))
-    : null
-  const positionStillLabel =
-    positionStillSeconds == null
-      ? null
-      : positionStillSeconds < 15
-        ? 'MOVING'
-        : formatUpdateAge(positionStillSeconds)
 
   return (
     <div className="app">
@@ -170,18 +173,16 @@ function App() {
               {place && <p className="telemetry-place">{place}</p>}
             </div>
 
-            <dl
-              className={`telemetry-grid${drift ? ' with-drift' : ''}${
-                positionStillLabel ? ' with-still' : ''
-              }`}
-            >
+            <dl className={`telemetry-grid${drift ? ' with-drift' : ''}`}>
               <div>
                 <dt>Coordinates</dt>
                 <dd>{formatLatLon(current.latitude, current.longitude)}</dd>
               </div>
               <div>
                 <dt>Mission clock</dt>
-                <dd>{formatMissionClock(current.mission_time)}</dd>
+                <dd>
+                  {formatMissionClock(liveMissionTime ?? current.mission_time)}
+                </dd>
               </div>
               <div>
                 <dt>Speed</dt>
@@ -195,17 +196,6 @@ function App() {
                   {formatAltitudeKm(current.altitude)} <span>km</span>
                 </dd>
               </div>
-              {positionStillLabel && (
-                <div>
-                  <dt>Position still</dt>
-                  <dd>
-                    {positionStillLabel}
-                    {positionStillLabel !== 'MOVING' && (
-                      <span>since last move</span>
-                    )}
-                  </dd>
-                </div>
-              )}
               {drift && (
                 <div>
                   <dt>Ocean drift</dt>

@@ -505,14 +505,6 @@ select {
   .telemetry-grid.with-drift {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .telemetry-grid.with-still {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .telemetry-grid.with-drift.with-still {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 .telemetry-grid > div {

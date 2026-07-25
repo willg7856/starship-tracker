@@ -209,10 +209,15 @@ export function formatDriftDuration(seconds: number): string {
   const days = Math.floor(total / 86400)
   const h = Math.floor((total % 86400) / 3600)
   const m = Math.floor((total % 3600) / 60)
-  if (days > 0) return `${days}D ${h}H`
-  if (h > 0) return `${h}H ${String(m).padStart(2, '0')}M`
-  if (m > 0) return `${m}M`
-  return `${total}S`
+  const s = total % 60
+  if (days > 0) {
+    return `${days}D ${h}H ${String(m).padStart(2, '0')}M`
+  }
+  if (h > 0) {
+    return `${h}H ${String(m).padStart(2, '0')}M ${String(s).padStart(2, '0')}S`
+  }
+  if (m > 0) return `${m}M ${String(s).padStart(2, '0')}S`
+  return `${s}S`
 }
 
 export function isNearSurface(altitudeM: number): boolean {
