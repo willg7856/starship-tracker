@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { SPACE_NOTICES_BAKED_LATEST_ID } from '../data/flight13Path'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  SPACE_NOTICES_BAKED_LATEST_ID,
+  getFlightTrack,
+} from '../data/flight13Path'
+import { estimateLastMoveGpsTime } from '../lib/lastMove'
 import {
   appendLiveFix,
   loadLiveTrail,
@@ -7,18 +11,15 @@ import {
   type LiveTrailPoint,
 } from '../lib/liveTrail'
 import {
-  loadPositionStill,
-  observePositionFix,
-  positionStillSinceDate,
-  savePositionStill,
-  type PositionStillState,
-} from '../lib/positionStill'
-import {
   fetchSpaceNoticesShip40,
   pointsAfterId,
   type SpaceNoticesPoint,
 } from '../lib/spaceNotices'
-import { fetchShip40Tracker, type ShipTrack } from '../lib/spacex'
+import {
+  fetchShip40Tracker,
+  gpsTimeToDate,
+  type ShipTrack,
+} from '../lib/spacex'
 
 const POLL_MS = 10_000
 const SPACE_NOTICES_POLL_MS = 60_000
@@ -33,10 +34,11 @@ export type TrackerState = {
   liveTrail: LiveTrailPoint[]
   /** Newer Space Notices trajectory samples beyond the baked path tip. */
   spaceNoticesExtension: SpaceNoticesPoint[]
-  /** When the reported lat/lon last actually changed (feed may still tick). */
-  positionStillSince: Date | null
-  /** False until this browser has witnessed a real lat/lon change. */
-  positionMoveConfirmed: boolean
+  /**
+   * When Ship 40 last actually changed position, derived from the shared
+   * ground track so every device agrees.
+   */
+  lastMovedAt: Date | null
 }
 
 export function useShip40(): TrackerState {
@@ -51,9 +53,6 @@ export function useShip40(): TrackerState {
   const [spaceNoticesExtension, setSpaceNoticesExtension] = useState<
     SpaceNoticesPoint[]
   >([])
-  const [positionStill, setPositionStill] = useState<PositionStillState | null>(
-    () => loadPositionStill(),
-  )
   const hasLoaded = useRef(false)
 
   useEffect(() => {
@@ -78,20 +77,6 @@ export function useShip40(): TrackerState {
         setLiveTrail((prev) => {
           const next = appendLiveFix(prev, nextShip.current)
           if (next !== prev) saveLiveTrail(next)
-          return next
-        })
-
-        setPositionStill((prev) => {
-          const next = observePositionFix(prev, nextShip.current)
-          if (
-            !prev ||
-            prev.latitude !== next.latitude ||
-            prev.longitude !== next.longitude ||
-            prev.since_gps_time !== next.since_gps_time ||
-            prev.moveConfirmed !== next.moveConfirmed
-          ) {
-            savePositionStill(next)
-          }
           return next
         })
       } catch (err) {
@@ -146,6 +131,16 @@ export function useShip40(): TrackerState {
     }
   }, [])
 
+  const lastMovedAt = useMemo(() => {
+    if (!ship?.current) return null
+    const gps = estimateLastMoveGpsTime(
+      ship.current,
+      getFlightTrack(),
+      spaceNoticesExtension,
+    )
+    return gpsTimeToDate(gps)
+  }, [ship, spaceNoticesExtension])
+
   return {
     ship,
     fetchedAt,
@@ -154,7 +149,6 @@ export function useShip40(): TrackerState {
     refreshing,
     liveTrail,
     spaceNoticesExtension,
-    positionStillSince: positionStillSinceDate(positionStill),
-    positionMoveConfirmed: positionStill?.moveConfirmed ?? false,
+    lastMovedAt,
   }
 }
