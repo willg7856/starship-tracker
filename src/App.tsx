@@ -42,6 +42,7 @@ function App() {
     liveTrail,
     spaceNoticesExtension,
     positionStillSince,
+    positionMoveConfirmed,
   } = useShip40()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -96,16 +97,19 @@ function App() {
   }, [current, liveMissionTime])
 
   // Nav age = time since lat/lon last changed (not feed clock ticks).
+  // First page load is not a move — only say "last updated" after a real change.
   const liveLabel = error
     ? 'OFFLINE'
     : loading || !positionStillSince
       ? 'LINKING'
-      : `LAST UPDATED ${formatUpdateAge(
-          Math.max(
-            0,
-            Math.floor((nowMs - positionStillSince.getTime()) / 1000),
-          ),
-        )}`
+      : positionMoveConfirmed
+        ? `LAST UPDATED ${formatUpdateAge(
+            Math.max(
+              0,
+              Math.floor((nowMs - positionStillSince.getTime()) / 1000),
+            ),
+          )}`
+        : 'NO MOVE SINCE LOAD'
 
   return (
     <div className="app">

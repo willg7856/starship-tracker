@@ -35,6 +35,8 @@ export type TrackerState = {
   spaceNoticesExtension: SpaceNoticesPoint[]
   /** When the reported lat/lon last actually changed (feed may still tick). */
   positionStillSince: Date | null
+  /** False until this browser has witnessed a real lat/lon change. */
+  positionMoveConfirmed: boolean
 }
 
 export function useShip40(): TrackerState {
@@ -85,7 +87,8 @@ export function useShip40(): TrackerState {
             !prev ||
             prev.latitude !== next.latitude ||
             prev.longitude !== next.longitude ||
-            prev.since_gps_time !== next.since_gps_time
+            prev.since_gps_time !== next.since_gps_time ||
+            prev.moveConfirmed !== next.moveConfirmed
           ) {
             savePositionStill(next)
           }
@@ -152,5 +155,6 @@ export function useShip40(): TrackerState {
     liveTrail,
     spaceNoticesExtension,
     positionStillSince: positionStillSinceDate(positionStill),
+    positionMoveConfirmed: positionStill?.moveConfirmed ?? false,
   }
 }
