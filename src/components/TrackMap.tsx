@@ -98,10 +98,7 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
   const landed = isNearSurface(current.altitude)
   const [mode, setMode] = useState<ViewMode>('flight')
 
-  const { ascent, reentry, oceanDriftSegments, full } = useMemo(
-    () => buildFlightPath(),
-    [],
-  )
+  const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
 
   const livePath = useMemo(() => {
     const pts: Array<[number, number]> = liveTrail.map((p) => [
@@ -117,17 +114,21 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
   }, [liveTrail, current.latitude, current.longitude])
 
   const driftFrame = useMemo(() => {
-    const pts: Array<[number, number]> = [[LANDING_FIX.lat, LANDING_FIX.lon]]
-    for (const seg of oceanDriftSegments) for (const p of seg) pts.push(p)
+    const pts: Array<[number, number]> = oceanDrift.length
+      ? [...oceanDrift]
+      : [[LANDING_FIX.lat, LANDING_FIX.lon]]
     for (const p of livePath) pts.push(p)
     return pts
-  }, [oceanDriftSegments, livePath])
+  }, [oceanDrift, livePath])
 
-  // Browser-local live trail only — do not bridge across the archive gap.
+  // Bridge from archived/baked drift through the live trail (may include a straight gap).
   const liveDriftPath = useMemo(() => {
-    if (!landed || livePath.length < 2) return null
-    return livePath
-  }, [landed, livePath])
+    if (!landed || livePath.length === 0) return null
+    const pts: Array<[number, number]> = []
+    if (oceanDrift.length > 0) pts.push(oceanDrift[oceanDrift.length - 1])
+    for (const p of livePath) pts.push(p)
+    return pts.length >= 2 ? pts : null
+  }, [landed, oceanDrift, livePath])
 
   const view = landed ? mode : 'flight'
 
@@ -203,17 +204,16 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
           />
         )}
 
-        {oceanDriftSegments.map((segment, idx) => (
+        {oceanDrift.length >= 2 && (
           <Polyline
-            key={`drift-${idx}`}
-            positions={segment}
+            positions={oceanDrift}
             pathOptions={{
               color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
               opacity: 0.95,
             }}
           />
-        ))}
+        )}
 
         {liveDriftPath && (
           <Polyline
