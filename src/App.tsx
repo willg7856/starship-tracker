@@ -17,28 +17,18 @@ import {
   isNearSurface,
 } from './lib/spacex'
 
-function unitLabel(value: number, singular: string, plural: string): string {
-  return `${value} ${value === 1 ? singular : plural}`
-}
-
 function formatUpdateAge(seconds: number): string {
-  if (seconds < 60) {
-    return `${unitLabel(seconds, 'SECOND', 'SECONDS')} AGO`
-  }
+  if (seconds < 60) return `${seconds}S AGO`
   const totalMins = Math.floor(seconds / 60)
-  if (totalMins < 60) {
-    return `${unitLabel(totalMins, 'MINUTE', 'MINUTES')} AGO`
-  }
+  if (totalMins < 60) return `${totalMins}M AGO`
   const hrs = Math.floor(totalMins / 60)
   const mins = totalMins % 60
   if (hrs < 48) {
-    if (mins === 0) return `${unitLabel(hrs, 'HOUR', 'HOURS')} AGO`
-    return `${unitLabel(hrs, 'HOUR', 'HOURS')} ${unitLabel(mins, 'MINUTE', 'MINUTES')} AGO`
+    return mins === 0 ? `${hrs}H AGO` : `${hrs}H ${mins}M AGO`
   }
   const days = Math.floor(hrs / 24)
   const remHrs = hrs % 24
-  if (remHrs === 0) return `${unitLabel(days, 'DAY', 'DAYS')} AGO`
-  return `${unitLabel(days, 'DAY', 'DAYS')} ${unitLabel(remHrs, 'HOUR', 'HOURS')} AGO`
+  return remHrs === 0 ? `${days}D AGO` : `${days}D ${remHrs}H AGO`
 }
 
 function App() {
