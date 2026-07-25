@@ -418,6 +418,15 @@ select {
   background: var(--ink-3) !important;
 }
 
+/* Longer, softer transform easing while Leaflet animates zoom. */
+.track-map.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+}
+
+.track-map.leaflet-fade-anim .leaflet-tile {
+  transition: opacity 0.28s ease !important;
+}
+
 .path-marker {
   background: transparent !important;
   border: 0 !important;

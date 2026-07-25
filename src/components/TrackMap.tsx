@@ -152,6 +152,14 @@ export function TrackMap({ ship }: Props) {
         attributionControl={false}
         worldCopyJump
         maxZoom={18}
+        // Fractional zoom + softer wheel scaling so zoom feels continuous.
+        zoomSnap={0.1}
+        zoomDelta={0.5}
+        wheelPxPerZoomLevel={120}
+        wheelDebounceTime={20}
+        zoomAnimation
+        fadeAnimation
+        markerZoomAnimation
       >
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
