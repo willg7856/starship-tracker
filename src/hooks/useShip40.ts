@@ -5,18 +5,12 @@ import {
   saveLiveTrail,
   type LiveTrailPoint,
 } from '../lib/liveTrail'
-import {
-  fetchMissionSummary,
-  fetchShip40Tracker,
-  type MissionSummary,
-  type ShipTrack,
-} from '../lib/spacex'
+import { fetchShip40Tracker, type ShipTrack } from '../lib/spacex'
 
 const POLL_MS = 10_000
 
 export type TrackerState = {
   ship: ShipTrack | null
-  mission: MissionSummary | null
   fetchedAt: Date | null
   error: string | null
   loading: boolean
@@ -27,12 +21,13 @@ export type TrackerState = {
 
 export function useShip40(): TrackerState {
   const [ship, setShip] = useState<ShipTrack | null>(null)
-  const [mission, setMission] = useState<MissionSummary | null>(null)
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [liveTrail, setLiveTrail] = useState<LiveTrailPoint[]>(() => loadLiveTrail())
+  const [liveTrail, setLiveTrail] = useState<LiveTrailPoint[]>(() =>
+    loadLiveTrail(),
+  )
   const hasLoaded = useRef(false)
 
   useEffect(() => {
@@ -44,19 +39,14 @@ export function useShip40(): TrackerState {
       else if (!hasLoaded.current) setLoading(true)
 
       try {
-        const [{ ship: nextShip, fetchedAt: at }, missionSummary] =
-          await Promise.all([
-            fetchShip40Tracker(controller.signal),
-            hasLoaded.current
-              ? Promise.resolve(null)
-              : fetchMissionSummary(controller.signal),
-          ])
+        const { ship: nextShip, fetchedAt: at } = await fetchShip40Tracker(
+          controller.signal,
+        )
 
         if (cancelled) return
         setShip(nextShip)
         setFetchedAt(at)
         setError(null)
-        if (missionSummary) setMission(missionSummary)
         hasLoaded.current = true
 
         setLiveTrail((prev) => {
@@ -87,5 +77,5 @@ export function useShip40(): TrackerState {
     }
   }, [])
 
-  return { ship, mission, fetchedAt, error, loading, refreshing, liveTrail }
+  return { ship, fetchedAt, error, loading, refreshing, liveTrail }
 }
