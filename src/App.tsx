@@ -17,20 +17,28 @@ import {
   isNearSurface,
 } from './lib/spacex'
 
+function unitLabel(value: number, singular: string, plural: string): string {
+  return `${value} ${value === 1 ? singular : plural}`
+}
+
 function formatUpdateAge(seconds: number): string {
   if (seconds < 60) {
-    return `${seconds} ${seconds === 1 ? 'SECOND' : 'SECONDS'} AGO`
+    return `${unitLabel(seconds, 'SECOND', 'SECONDS')} AGO`
   }
-  const mins = Math.floor(seconds / 60)
-  if (mins < 60) {
-    return `${mins} ${mins === 1 ? 'MINUTE' : 'MINUTES'} AGO`
+  const totalMins = Math.floor(seconds / 60)
+  if (totalMins < 60) {
+    return `${unitLabel(totalMins, 'MINUTE', 'MINUTES')} AGO`
   }
-  const hrs = Math.floor(mins / 60)
+  const hrs = Math.floor(totalMins / 60)
+  const mins = totalMins % 60
   if (hrs < 48) {
-    return `${hrs} ${hrs === 1 ? 'HOUR' : 'HOURS'} AGO`
+    if (mins === 0) return `${unitLabel(hrs, 'HOUR', 'HOURS')} AGO`
+    return `${unitLabel(hrs, 'HOUR', 'HOURS')} ${unitLabel(mins, 'MINUTE', 'MINUTES')} AGO`
   }
   const days = Math.floor(hrs / 24)
-  return `${days} ${days === 1 ? 'DAY' : 'DAYS'} AGO`
+  const remHrs = hrs % 24
+  if (remHrs === 0) return `${unitLabel(days, 'DAY', 'DAYS')} AGO`
+  return `${unitLabel(days, 'DAY', 'DAYS')} ${unitLabel(remHrs, 'HOUR', 'HOURS')} AGO`
 }
 
 function App() {
