@@ -28,7 +28,8 @@ function formatUpdateAge(seconds: number): string {
 }
 
 function App() {
-  const { ship, fetchedAt, error, loading, liveTrail } = useShip40()
+  const { ship, fetchedAt, error, loading, liveTrail, spaceNoticesExtension } =
+    useShip40()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -122,7 +123,11 @@ function App() {
       <section className="map-section" aria-label="Ship 40 map">
         <div className="map-frame">
           {current && ship ? (
-            <TrackMap ship={ship} liveTrail={liveTrail} />
+            <TrackMap
+              ship={ship}
+              liveTrail={liveTrail}
+              spaceNoticesExtension={spaceNoticesExtension}
+            />
           ) : (
             <div className="map-skeleton">
               {error ? <p>{error}</p> : <p>Acquiring telemetry…</p>}

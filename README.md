@@ -32,9 +32,15 @@ npm run preview
 
 ## Flight path
 
-SpaceX’s live tracker only keeps the current fix plus a short forward prediction. The flown Flight 13 ground track comes from the archived SpaceX tracker series on [Space Notices](https://space-notices.com/entry/launch-starship-flight-13). After that archive ends, this site grows its own live trail from SpaceX updates in the browser.
+SpaceX’s live tracker only keeps the current fix plus a short forward prediction. The flown Flight 13 ground track comes from the [Space Notices](https://space-notices.com/entry/launch-starship-flight-13) Trajectory layer (seed path + live [`ship-40`](https://data.space-notices.com/space-notices-data/ship-40) feed via `/api/space-notices-ship40`). After the baked tip, the map also extends from that feed and from SpaceX near-surface fixes in the browser.
 
 **Ocean drift** is the distance from the archived splashdown fix to the live SpaceX position.
+
+Rebuild the baked path:
+
+```bash
+python3 scripts/rebuild-flight13-path-from-space-notices.py
+```
 
 ## Notes
 

@@ -18,6 +18,11 @@ export default defineConfig({
         rewrite: () =>
           '/api/spacex-website/missions/starship-flight-13',
       },
+      '/api/space-notices-ship40': {
+        target: 'https://data.space-notices.com',
+        changeOrigin: true,
+        rewrite: () => '/space-notices-data/ship-40',
+      },
     },
   },
 })

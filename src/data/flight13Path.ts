@@ -33,6 +33,14 @@ export const FLIGHT_PATH_SOURCE = {
   description: track.description,
 }
 
+/** Latest Space Notices trajectory id baked into the static path. */
+export const SPACE_NOTICES_BAKED_LATEST_ID: number =
+  (track as { spaceNotices?: { latestId?: number } }).spaceNotices
+    ?.latestId ??
+  (track as { archivedThrough?: { space_notices_id?: number } })
+    .archivedThrough?.space_notices_id ??
+  0
+
 /**
  * First near-surface SpaceX tracker fix after Flight 13 reentry
  * (from Space Notices archive). Baseline for ocean-drift distance.

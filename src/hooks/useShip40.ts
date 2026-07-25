@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import { SPACE_NOTICES_BAKED_LATEST_ID } from '../data/flight13Path'
 import {
   appendLiveFix,
   loadLiveTrail,
   saveLiveTrail,
   type LiveTrailPoint,
 } from '../lib/liveTrail'
+import {
+  fetchSpaceNoticesShip40,
+  pointsAfterId,
+  type SpaceNoticesPoint,
+} from '../lib/spaceNotices'
 import { fetchShip40Tracker, type ShipTrack } from '../lib/spacex'
 
 const POLL_MS = 10_000
+const SPACE_NOTICES_POLL_MS = 60_000
 
 export type TrackerState = {
   ship: ShipTrack | null
@@ -17,6 +24,8 @@ export type TrackerState = {
   refreshing: boolean
   /** Accumulated near-surface SpaceX fixes since this browser started tracking. */
   liveTrail: LiveTrailPoint[]
+  /** Newer Space Notices trajectory samples beyond the baked path tip. */
+  spaceNoticesExtension: SpaceNoticesPoint[]
 }
 
 export function useShip40(): TrackerState {
@@ -28,6 +37,9 @@ export function useShip40(): TrackerState {
   const [liveTrail, setLiveTrail] = useState<LiveTrailPoint[]>(() =>
     loadLiveTrail(),
   )
+  const [spaceNoticesExtension, setSpaceNoticesExtension] = useState<
+    SpaceNoticesPoint[]
+  >([])
   const hasLoaded = useRef(false)
 
   useEffect(() => {
@@ -77,5 +89,42 @@ export function useShip40(): TrackerState {
     }
   }, [])
 
-  return { ship, fetchedAt, error, loading, refreshing, liveTrail }
+  useEffect(() => {
+    const controller = new AbortController()
+    let cancelled = false
+
+    async function loadSpaceNotices() {
+      try {
+        const points = await fetchSpaceNoticesShip40(controller.signal)
+        if (cancelled) return
+        setSpaceNoticesExtension(
+          pointsAfterId(points, SPACE_NOTICES_BAKED_LATEST_ID),
+        )
+      } catch {
+        // Space Notices is supplemental path data; SpaceX tracker remains primary.
+      }
+    }
+
+    void loadSpaceNotices()
+    const id = window.setInterval(
+      () => void loadSpaceNotices(),
+      SPACE_NOTICES_POLL_MS,
+    )
+
+    return () => {
+      cancelled = true
+      controller.abort()
+      window.clearInterval(id)
+    }
+  }, [])
+
+  return {
+    ship,
+    fetchedAt,
+    error,
+    loading,
+    refreshing,
+    liveTrail,
+    spaceNoticesExtension,
+  }
 }

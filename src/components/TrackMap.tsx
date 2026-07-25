@@ -17,6 +17,7 @@ import {
 } from '../data/flight13Path'
 import type { LiveTrailPoint } from '../lib/liveTrail'
 import { thinLatLonPath } from '../lib/liveTrail'
+import type { SpaceNoticesPoint } from '../lib/spaceNotices'
 import { formatLatLon, isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
@@ -24,6 +25,8 @@ import 'leaflet/dist/leaflet.css'
 type Props = {
   ship: ShipTrack
   liveTrail?: LiveTrailPoint[]
+  /** Newer Space Notices samples beyond the baked archive tip. */
+  spaceNoticesExtension?: SpaceNoticesPoint[]
 }
 
 type ViewMode = 'drift' | 'flight'
@@ -93,7 +96,11 @@ function FitBoundsOnModeChange({
   return null
 }
 
-export function TrackMap({ ship, liveTrail = [] }: Props) {
+export function TrackMap({
+  ship,
+  liveTrail = [],
+  spaceNoticesExtension = [],
+}: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
   const landed = isNearSurface(current.altitude)
@@ -101,10 +108,24 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
 
   const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
 
+  const snExtensionPath = useMemo(
+    () =>
+      spaceNoticesExtension.map(
+        (p) => [p.latitude, p.longitude] as [number, number],
+      ),
+    [spaceNoticesExtension],
+  )
+
   // Thin archived drift so dense GPS noise near the tip doesn't scribble.
+  // Append newer Space Notices samples so the yellow path stays current.
   const oceanDriftClean = useMemo(
-    () => thinLatLonPath(oceanDrift),
-    [oceanDrift],
+    () => thinLatLonPath([...oceanDrift, ...snExtensionPath]),
+    [oceanDrift, snExtensionPath],
+  )
+
+  const fullPath = useMemo(
+    () => [...full, ...snExtensionPath],
+    [full, snExtensionPath],
   )
 
   const livePath = useMemo(() => {
@@ -184,7 +205,7 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
         />
         <FitBoundsOnModeChange
           mode={view}
-          fullPath={full}
+          fullPath={fullPath}
           driftPoints={driftFrame}
           live={center}
         />
