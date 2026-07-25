@@ -20,6 +20,9 @@ export type NoticePolygonGroup = {
   polygons: Array<Array<[number, number]>>
 }
 
+/** Break polylines when samples are farther apart than this (seconds). */
+const MAX_TRACK_GAP_S = 120
+
 /** Orbital Launch Pad 2 */
 export const LAUNCH_PAD: LatLon = {
   lat: track.points[0]?.lat ?? 25.99684,
@@ -58,25 +61,50 @@ export function getFlightTrack(): TrackPoint[] {
   return track.points as TrackPoint[]
 }
 
+function toLatLon(p: TrackPoint): [number, number] {
+  return [p.lat, p.lon]
+}
+
+/** Split a timed track into continuous segments (no long straight jumps). */
+export function splitTrackByTimeGap(
+  points: TrackPoint[],
+  maxGapS = MAX_TRACK_GAP_S,
+): Array<Array<[number, number]>> {
+  const segments: Array<Array<[number, number]>> = []
+  let current: Array<[number, number]> = []
+  let prevT: number | null = null
+
+  for (const point of points) {
+    if (prevT != null && point.t - prevT > maxGapS) {
+      if (current.length >= 2) segments.push(current)
+      current = []
+    }
+    current.push(toLatLon(point))
+    prevT = point.t
+  }
+
+  if (current.length >= 2) segments.push(current)
+  return segments
+}
+
 /**
- * Path segments from the Space Notices archive (same series as their
- * yellow Trajectory layer — every archived tracker sample).
+ * Path segments from Space Notices archive + later SpaceX samples.
+ * Ocean-drift may be multiple polylines when a time gap exists.
  */
 export function buildFlightPath(): {
   ascent: Array<[number, number]>
   reentry: Array<[number, number]>
-  oceanDrift: Array<[number, number]>
+  oceanDriftSegments: Array<Array<[number, number]>>
   full: Array<[number, number]>
 } {
   const points = getFlightTrack()
-  const toLatLon = (p: TrackPoint) => [p.lat, p.lon] as [number, number]
 
   const ascent = points.slice(0, entryIndex + 1).map(toLatLon)
   const reentry = points.slice(entryIndex, splashIndex + 1).map(toLatLon)
-  const oceanDrift = points.slice(splashIndex).map(toLatLon)
+  const oceanDriftSegments = splitTrackByTimeGap(points.slice(splashIndex))
   const full = points.map(toLatLon)
 
-  return { ascent, reentry, oceanDrift, full }
+  return { ascent, reentry, oceanDriftSegments, full }
 }
 
 export function getNoticePolygons(): NoticePolygonGroup[] {
