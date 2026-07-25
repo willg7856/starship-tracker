@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TrackMap } from './components/TrackMap'
 import { useShip40 } from './hooks/useShip40'
 import { LANDING_FIX } from './data/flight13Path'
@@ -18,9 +18,25 @@ import {
   isNearSurface,
 } from './lib/spacex'
 
+function formatUpdateAge(seconds: number): string {
+  if (seconds < 5) return 'JUST NOW'
+  if (seconds < 60) return `${seconds}S AGO`
+  const mins = Math.floor(seconds / 60)
+  if (mins < 60) return `${mins}M AGO`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 48) return `${hrs}H AGO`
+  const days = Math.floor(hrs / 24)
+  return `${days}D AGO`
+}
+
 function App() {
-  const { ship, mission, fetchedAt, error, loading, refreshing, liveTrail } =
-    useShip40()
+  const { ship, mission, fetchedAt, error, loading, liveTrail } = useShip40()
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
 
   const current = ship?.current
   const place = useMemo(() => {
@@ -61,13 +77,17 @@ function App() {
       }) + ' UTC'
     : null
 
+  const lastUpdateAt = current
+    ? gpsTimeToDate(current.gps_time)
+    : fetchedAt
+
   const liveLabel = error
     ? 'OFFLINE'
-    : loading
+    : loading || !lastUpdateAt
       ? 'LINKING'
-      : refreshing
-        ? 'SYNCING'
-        : 'LIVE TRACKING'
+      : formatUpdateAge(
+          Math.max(0, Math.floor((nowMs - lastUpdateAt.getTime()) / 1000)),
+        )
 
   return (
     <div className="app">
