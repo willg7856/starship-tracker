@@ -16,6 +16,7 @@ import {
   buildFlightPath,
 } from '../data/flight13Path'
 import type { LiveTrailPoint } from '../lib/liveTrail'
+import { thinLatLonPath } from '../lib/liveTrail'
 import { formatLatLon, isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
@@ -100,35 +101,41 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
 
   const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
 
+  // Thin archived drift so dense GPS noise near the tip doesn't scribble.
+  const oceanDriftClean = useMemo(
+    () => thinLatLonPath(oceanDrift),
+    [oceanDrift],
+  )
+
   const livePath = useMemo(() => {
-    const pts: Array<[number, number]> = liveTrail.map((p) => [
-      p.latitude,
-      p.longitude,
-    ])
+    // Trail is already thinned on write; don't stitch the raw jittery tip onto it.
+    return liveTrail.map((p) => [p.latitude, p.longitude] as [number, number])
+  }, [liveTrail])
+
+  const driftFrame = useMemo(() => {
+    const pts: Array<[number, number]> = oceanDriftClean.length
+      ? [...oceanDriftClean]
+      : [[LANDING_FIX.lat, LANDING_FIX.lon]]
+    for (const p of livePath) pts.push(p)
+    pts.push([current.latitude, current.longitude])
+    return pts
+  }, [oceanDriftClean, livePath, current.latitude, current.longitude])
+
+  // Bridge from cleaned archive through live trail, then a single stub to "now".
+  const liveDriftPath = useMemo(() => {
+    if (!landed) return null
+    const pts: Array<[number, number]> = []
+    if (oceanDriftClean.length > 0) {
+      pts.push(oceanDriftClean[oceanDriftClean.length - 1])
+    }
+    for (const p of livePath) pts.push(p)
     const tip: [number, number] = [current.latitude, current.longitude]
     const last = pts[pts.length - 1]
     if (!last || Math.hypot(last[0] - tip[0], last[1] - tip[1]) > 1e-7) {
       pts.push(tip)
     }
-    return pts
-  }, [liveTrail, current.latitude, current.longitude])
-
-  const driftFrame = useMemo(() => {
-    const pts: Array<[number, number]> = oceanDrift.length
-      ? [...oceanDrift]
-      : [[LANDING_FIX.lat, LANDING_FIX.lon]]
-    for (const p of livePath) pts.push(p)
-    return pts
-  }, [oceanDrift, livePath])
-
-  // Bridge from archived/baked drift through the live trail (may include a straight gap).
-  const liveDriftPath = useMemo(() => {
-    if (!landed || livePath.length === 0) return null
-    const pts: Array<[number, number]> = []
-    if (oceanDrift.length > 0) pts.push(oceanDrift[oceanDrift.length - 1])
-    for (const p of livePath) pts.push(p)
-    return pts.length >= 2 ? pts : null
-  }, [landed, oceanDrift, livePath])
+    return pts.length >= 2 ? thinLatLonPath(pts) : null
+  }, [landed, oceanDriftClean, livePath, current.latitude, current.longitude])
 
   const view = landed ? mode : 'flight'
 
@@ -204,9 +211,9 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
           />
         )}
 
-        {oceanDrift.length >= 2 && (
+        {oceanDriftClean.length >= 2 && (
           <Polyline
-            positions={oceanDrift}
+            positions={oceanDriftClean}
             pathOptions={{
               color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
