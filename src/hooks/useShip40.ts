@@ -7,6 +7,13 @@ import {
   type LiveTrailPoint,
 } from '../lib/liveTrail'
 import {
+  loadPositionStill,
+  observePositionFix,
+  positionStillSinceDate,
+  savePositionStill,
+  type PositionStillState,
+} from '../lib/positionStill'
+import {
   fetchSpaceNoticesShip40,
   pointsAfterId,
   type SpaceNoticesPoint,
@@ -26,6 +33,8 @@ export type TrackerState = {
   liveTrail: LiveTrailPoint[]
   /** Newer Space Notices trajectory samples beyond the baked path tip. */
   spaceNoticesExtension: SpaceNoticesPoint[]
+  /** When the reported lat/lon last actually changed (feed may still tick). */
+  positionStillSince: Date | null
 }
 
 export function useShip40(): TrackerState {
@@ -40,6 +49,9 @@ export function useShip40(): TrackerState {
   const [spaceNoticesExtension, setSpaceNoticesExtension] = useState<
     SpaceNoticesPoint[]
   >([])
+  const [positionStill, setPositionStill] = useState<PositionStillState | null>(
+    () => loadPositionStill(),
+  )
   const hasLoaded = useRef(false)
 
   useEffect(() => {
@@ -64,6 +76,19 @@ export function useShip40(): TrackerState {
         setLiveTrail((prev) => {
           const next = appendLiveFix(prev, nextShip.current)
           if (next !== prev) saveLiveTrail(next)
+          return next
+        })
+
+        setPositionStill((prev) => {
+          const next = observePositionFix(prev, nextShip.current)
+          if (
+            !prev ||
+            prev.latitude !== next.latitude ||
+            prev.longitude !== next.longitude ||
+            prev.since_gps_time !== next.since_gps_time
+          ) {
+            savePositionStill(next)
+          }
           return next
         })
       } catch (err) {
@@ -126,5 +151,6 @@ export function useShip40(): TrackerState {
     refreshing,
     liveTrail,
     spaceNoticesExtension,
+    positionStillSince: positionStillSinceDate(positionStill),
   }
 }

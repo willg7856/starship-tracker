@@ -28,8 +28,15 @@ function formatUpdateAge(seconds: number): string {
 }
 
 function App() {
-  const { ship, fetchedAt, error, loading, liveTrail, spaceNoticesExtension } =
-    useShip40()
+  const {
+    ship,
+    fetchedAt,
+    error,
+    loading,
+    liveTrail,
+    spaceNoticesExtension,
+    positionStillSince,
+  } = useShip40()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -74,6 +81,16 @@ function App() {
       : formatUpdateAge(
           Math.max(0, Math.floor((nowMs - lastUpdateAt.getTime()) / 1000)),
         )
+
+  const positionStillSeconds = positionStillSince
+    ? Math.max(0, Math.floor((nowMs - positionStillSince.getTime()) / 1000))
+    : null
+  const positionStillLabel =
+    positionStillSeconds == null
+      ? null
+      : positionStillSeconds < 15
+        ? 'MOVING'
+        : formatUpdateAge(positionStillSeconds)
 
   return (
     <div className="app">
@@ -147,7 +164,11 @@ function App() {
               {place && <p className="telemetry-place">{place}</p>}
             </div>
 
-            <dl className={`telemetry-grid${drift ? ' with-drift' : ''}`}>
+            <dl
+              className={`telemetry-grid${drift ? ' with-drift' : ''}${
+                positionStillLabel ? ' with-still' : ''
+              }`}
+            >
               <div>
                 <dt>Coordinates</dt>
                 <dd>{formatLatLon(current.latitude, current.longitude)}</dd>
@@ -168,6 +189,17 @@ function App() {
                   {formatAltitudeKm(current.altitude)} <span>km</span>
                 </dd>
               </div>
+              {positionStillLabel && (
+                <div>
+                  <dt>Position still</dt>
+                  <dd>
+                    {positionStillLabel}
+                    {positionStillLabel !== 'MOVING' && (
+                      <span>since last move</span>
+                    )}
+                  </dd>
+                </div>
+              )}
               {drift && (
                 <div>
                   <dt>Ocean drift</dt>
