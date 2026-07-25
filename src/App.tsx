@@ -19,7 +19,6 @@ import {
 } from './lib/spacex'
 
 function formatUpdateAge(seconds: number): string {
-  if (seconds < 5) return 'JUST NOW'
   if (seconds < 60) return `${seconds}S AGO`
   const mins = Math.floor(seconds / 60)
   if (mins < 60) return `${mins}M AGO`
