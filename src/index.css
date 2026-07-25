@@ -107,7 +107,8 @@ select {
 .nav {
   position: sticky;
   top: 0;
-  z-index: 50;
+  /* Above Leaflet panes/controls (up to ~1000) so the bar stays over the map. */
+  z-index: 2000;
   background: rgba(11, 13, 15, 0.94);
   color: var(--paper);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
