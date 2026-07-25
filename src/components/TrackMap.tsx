@@ -254,7 +254,7 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
           />
         )}
 
-        {/* Archived post-splashdown track + live tip — dotted to mark ocean drift */}
+        {/* Archived post-splashdown track */}
         {oceanDrift.length >= 2 && (
           <Polyline
             positions={oceanDrift}
@@ -262,7 +262,6 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
               color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
               opacity: 0.95,
-              dashArray: '6 8',
             }}
           />
         )}
@@ -275,7 +274,6 @@ export function TrackMap({ ship, liveTrail = [] }: Props) {
               color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
               opacity: 0.95,
-              dashArray: '6 8',
             }}
           />
         )}
