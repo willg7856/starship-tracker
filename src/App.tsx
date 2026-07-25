@@ -66,7 +66,7 @@ function App() {
       ? 'LINKING'
       : refreshing
         ? 'SYNCING'
-        : 'LIVE'
+        : 'LIVE TRACKING'
 
   return (
     <div className="app">
