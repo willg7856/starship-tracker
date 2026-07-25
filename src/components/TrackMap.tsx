@@ -13,10 +13,15 @@ import L from 'leaflet'
 import type { LatLngExpression } from 'leaflet'
 import {
   FLIGHT_PATH_SOURCE,
+  LANDING_FIX,
   LAUNCH_PAD,
   buildFlightPath,
+  getAscentHazard,
+  getBoosterTrack,
+  getFaaReentryCorridor,
   getIndianOceanHazard,
 } from '../data/flight13Path'
+import { isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
 
@@ -29,6 +34,13 @@ const launchIcon = L.divIcon({
   html: '<span></span>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
+})
+
+const landingIcon = L.divIcon({
+  className: 'path-marker landing-marker',
+  html: '<span></span>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
 })
 
 function FitFlightPath({
@@ -55,18 +67,21 @@ function FitFlightPath({
 export function TrackMap({ ship }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
+  const landed = isNearSurface(current.altitude)
 
-  const { coast, landing, full } = useMemo(
-    () =>
-      buildFlightPath({
-        lat: current.latitude,
-        lon: current.longitude,
-        label: 'Ship 40 splashdown',
-      }),
-    [current.latitude, current.longitude],
-  )
+  const { coast, landing, full } = useMemo(() => buildFlightPath(), [])
+  const booster = useMemo(() => getBoosterTrack(), [])
+  const ioHazard = useMemo(() => getIndianOceanHazard(), [])
+  const reentry = useMemo(() => getFaaReentryCorridor(), [])
+  const ascent = useMemo(() => getAscentHazard(), [])
 
-  const hazard = useMemo(() => getIndianOceanHazard(), [])
+  const driftLine = useMemo(() => {
+    if (!landed) return null
+    const a: [number, number] = [LANDING_FIX.lat, LANDING_FIX.lon]
+    const b: [number, number] = [current.latitude, current.longitude]
+    if (Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6) return null
+    return [a, b] as Array<[number, number]>
+  }, [landed, current.latitude, current.longitude])
 
   return (
     <div className="map-shell">
@@ -85,19 +100,59 @@ export function TrackMap({ ship }: Props) {
         />
         <FitFlightPath path={full} current={center} />
 
-        {hazard.length >= 3 && (
+        {ascent.length >= 3 && (
           <Polygon
-            positions={hazard}
+            positions={ascent}
+            pathOptions={{
+              color: '#6E8B9A',
+              weight: 1,
+              opacity: 0.25,
+              fillColor: '#6E8B9A',
+              fillOpacity: 0.04,
+            }}
+          />
+        )}
+
+        {reentry.length >= 3 && (
+          <Polygon
+            positions={reentry}
             pathOptions={{
               color: '#C9853A',
               weight: 1,
-              opacity: 0.35,
+              opacity: 0.4,
               fillColor: '#C9853A',
-              fillOpacity: 0.06,
+              fillOpacity: 0.07,
+            }}
+          >
+            <Popup>FAA Stage 2 reentry hazard corridor (approx.)</Popup>
+          </Polygon>
+        )}
+
+        {ioHazard.length >= 3 && (
+          <Polygon
+            positions={ioHazard}
+            pathOptions={{
+              color: '#C9853A',
+              weight: 1,
+              opacity: 0.3,
+              fillColor: '#C9853A',
+              fillOpacity: 0.05,
             }}
           >
             <Popup>Indian Ocean splashdown hazard zone</Popup>
           </Polygon>
+        )}
+
+        {booster.length >= 2 && (
+          <Polyline
+            positions={booster}
+            pathOptions={{
+              color: '#6E8B9A',
+              weight: 2,
+              opacity: 0.55,
+              dashArray: '2 6',
+            }}
+          />
         )}
 
         {coast.length >= 2 && (
@@ -123,6 +178,17 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
+        {driftLine && (
+          <Polyline
+            positions={driftLine}
+            pathOptions={{
+              color: '#F0C27A',
+              weight: 2,
+              opacity: 0.95,
+            }}
+          />
+        )}
+
         <Marker position={[LAUNCH_PAD.lat, LAUNCH_PAD.lon]} icon={launchIcon}>
           <Popup>
             <strong>Liftoff</strong>
@@ -130,6 +196,19 @@ export function TrackMap({ ship }: Props) {
             {LAUNCH_PAD.label}
           </Popup>
         </Marker>
+
+        {landed && (
+          <Marker
+            position={[LANDING_FIX.lat, LANDING_FIX.lon]}
+            icon={landingIcon}
+          >
+            <Popup>
+              <strong>Splashdown</strong>
+              <br />
+              First public SpaceX fix
+            </Popup>
+          </Marker>
+        )}
 
         <CircleMarker
           center={center}
@@ -144,7 +223,7 @@ export function TrackMap({ ship }: Props) {
           <Popup>
             <strong>Ship 40</strong>
             <br />
-            Live SpaceX splashdown fix
+            {landed ? 'Live position (drifting)' : 'Live SpaceX fix'}
           </Popup>
         </CircleMarker>
         <CircleMarker
@@ -160,12 +239,13 @@ export function TrackMap({ ship }: Props) {
       </MapContainer>
 
       <p className="map-caption">
-        Solid: Flight Club Ship coast (
+        Copper solid: Flight Club Ship coast. Dashed: FAA Stage 2 reentry
+        corridor to splashdown (
         <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
-          sim
+          FC sim
         </a>
-        ). Dashed: landing corridor into the live SpaceX splashdown. Shaded:
-        published IO hazard zone. Scroll or +/− to zoom.
+        ). Gold stub: drift since landing. SpaceX does not publish a full archived
+        ground track. Scroll or +/− to zoom.
       </p>
     </div>
   )

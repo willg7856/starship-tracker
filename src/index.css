@@ -308,6 +308,15 @@ a {
   box-shadow: 0 0 0 3px rgba(7, 26, 28, 0.35);
 }
 
+.landing-marker span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border-color: var(--flare);
+  background: transparent;
+  box-shadow: 0 0 0 2px rgba(240, 194, 122, 0.35);
+}
+
 .leaflet-control-zoom {
   border: 1px solid rgba(240, 194, 122, 0.35) !important;
   box-shadow: none !important;
@@ -421,6 +430,16 @@ a {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem 1.5rem;
   margin: 0;
+}
+
+.telemetry-grid.with-drift {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .telemetry-grid.with-drift {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .telemetry-grid div {

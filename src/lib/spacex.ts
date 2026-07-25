@@ -150,3 +150,58 @@ export function describeLocation(lat: number, lon: number, altitudeM: number): s
   if (altitudeM > 80000) return 'In flight / exoatmospheric'
   return 'En route'
 }
+
+/** Great-circle distance in kilometers. */
+export function haversineKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371.0088
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const φ1 = toRad(lat1)
+  const φ2 = toRad(lat2)
+  const Δφ = toRad(lat2 - lat1)
+  const Δλ = toRad(lon2 - lon1)
+  const a =
+    Math.sin(Δφ / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
+/** Initial bearing from point 1 → 2, degrees clockwise from north. */
+export function bearingDegrees(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const φ1 = toRad(lat1)
+  const φ2 = toRad(lat2)
+  const Δλ = toRad(lon2 - lon1)
+  const y = Math.sin(Δλ) * Math.cos(φ2)
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)
+  return (Math.atan2(y, x) * 180) / Math.PI
+}
+
+export function formatBearingCardinal(deg: number): string {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  const i = Math.round((((deg % 360) + 360) % 360) / 45) % 8
+  return dirs[i]
+}
+
+export function formatDriftDistance(km: number): string {
+  if (!Number.isFinite(km)) return '—'
+  if (km < 0.05) return '0 m'
+  if (km < 1) return `${Math.round(km * 1000)} m`
+  if (km < 10) return `${km.toFixed(2)} km`
+  return `${km.toFixed(1)} km`
+}
+
+export function isNearSurface(altitudeM: number): boolean {
+  return Number.isFinite(altitudeM) && altitudeM > -500 && altitudeM < 2000
+}

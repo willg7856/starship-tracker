@@ -1,15 +1,21 @@
 import { useMemo } from 'react'
 import { TrackMap } from './components/TrackMap'
 import { useShip40 } from './hooks/useShip40'
+import { LANDING_FIX } from './data/flight13Path'
 import {
   SPACEX_MISSION_PAGE,
   SPACEX_VEHICLE_TRACKER,
+  bearingDegrees,
   describeLocation,
   formatAltitudeKm,
+  formatBearingCardinal,
+  formatDriftDistance,
   formatLatLon,
   formatMissionClock,
   formatSpeedKmh,
   gpsTimeToDate,
+  haversineKm,
+  isNearSurface,
 } from './lib/spacex'
 
 function App() {
@@ -19,6 +25,30 @@ function App() {
   const place = useMemo(() => {
     if (!current) return null
     return describeLocation(current.latitude, current.longitude, current.altitude)
+  }, [current])
+
+  const drift = useMemo(() => {
+    if (!current || !isNearSurface(current.altitude)) return null
+    const km = haversineKm(
+      LANDING_FIX.lat,
+      LANDING_FIX.lon,
+      current.latitude,
+      current.longitude,
+    )
+    const bearing = bearingDegrees(
+      LANDING_FIX.lat,
+      LANDING_FIX.lon,
+      current.latitude,
+      current.longitude,
+    )
+    return {
+      km,
+      label: formatDriftDistance(km),
+      direction:
+        km < 0.05
+          ? 'on splashdown fix'
+          : `${formatBearingCardinal(bearing)} of splashdown`,
+    }
   }, [current])
 
   const stamp = current
@@ -84,7 +114,7 @@ function App() {
             <p>{place}</p>
           </div>
 
-          <dl className="telemetry-grid">
+          <dl className={`telemetry-grid${drift ? ' with-drift' : ''}`}>
             <div>
               <dt>Coordinates</dt>
               <dd>{formatLatLon(current.latitude, current.longitude)}</dd>
@@ -105,6 +135,15 @@ function App() {
                 {formatAltitudeKm(current.altitude)} <span>km</span>
               </dd>
             </div>
+            {drift && (
+              <div>
+                <dt>Drift since landing</dt>
+                <dd>
+                  {drift.label}{' '}
+                  <span>{drift.direction}</span>
+                </dd>
+              </div>
+            )}
           </dl>
 
           <p className="source-line">

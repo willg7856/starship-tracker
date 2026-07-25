@@ -27,27 +27,30 @@ export const FLIGHT_PATH_SOURCE = {
   description: track.description,
 }
 
-export const SPLASHDOWN_FIX: LatLon = {
-  lat: track.splashdown.lat,
-  lon: track.splashdown.lon,
-  label: 'Ship 40 splashdown',
+/** First public SpaceX splashdown fix after Flight 13 landing (frozen for drift). */
+export const LANDING_FIX: LatLon = {
+  lat: track.landingFix?.lat ?? track.splashdown.lat,
+  lon: track.landingFix?.lon ?? track.splashdown.lon,
+  label: track.landingFix?.label ?? 'Splashdown',
 }
 
 const coastEnd = track.segments.coast_end_index
 const landingStart = track.segments.landing_start_index
 
-/** Full Ship ground-track points (coast + landing corridor). */
 export function getFlightTrack(): TrackPoint[] {
   return track.points as TrackPoint[]
 }
 
+export function getBoosterTrack(): Array<[number, number]> {
+  return ((track.boosterPoints ?? []) as TrackPoint[]).map(
+    (p) => [p.lat, p.lon] as [number, number],
+  )
+}
+
 /**
  * Display path segments:
- * - coast: Flight Club stage-2 simulation through IO landing-corridor entry
- * - landing: published landing-corridor approach to the SpaceX splashdown fix
- *
- * If a live splashdown fix differs from the bundled one, the landing segment is
- * gently retargeted so the path still ends on the live marker.
+ * - coast: Flight Club stage-2 simulation into the Indian Ocean
+ * - landing: FAA Stage 2 reentry corridor approach to splashdown
  */
 export function buildFlightPath(liveSplashdown?: LatLon): {
   coast: Array<[number, number]>
@@ -63,31 +66,29 @@ export function buildFlightPath(liveSplashdown?: LatLon): {
     .slice(landingStart)
     .map((p) => [p.lat, p.lon] as [number, number])
 
-  // Keep continuity at the splice.
   if (coast.length && landing.length) {
     landing = [coast[coast.length - 1], ...landing]
   }
 
-  if (liveSplashdown && landing.length) {
-    const bundled = points[points.length - 1]
-    const dLat = liveSplashdown.lat - bundled.lat
-    const dLon = liveSplashdown.lon - bundled.lon
-    if (Math.abs(dLat) > 1e-5 || Math.abs(dLon) > 1e-5) {
-      const n = landing.length
-      landing = landing.map(([lat, lon], i) => {
-        const w = n <= 1 ? 1 : i / (n - 1)
-        return [lat + dLat * w, lon + dLon * w] as [number, number]
-      })
-    }
-  }
+  // Keep the frozen landing fix as the path end; live marker may drift away.
+  void liveSplashdown
 
   return { coast, landing, full: [...coast, ...landing.slice(1)] }
 }
 
-/** Indian Ocean splashdown hazard polygon (Flight Club mission data). */
 export function getIndianOceanHazard(): Array<[number, number]> {
   const zone = track.hazardZones?.find((z) =>
+    (z.kind === 'indian_ocean_splashdown') ||
     z.vertices.some(([lat, lon]) => lat < -10 && lon > 70),
   )
+  return (zone?.vertices ?? []) as Array<[number, number]>
+}
+
+export function getFaaReentryCorridor(): Array<[number, number]> {
+  return (track.faaReentryCorridor ?? []) as Array<[number, number]>
+}
+
+export function getAscentHazard(): Array<[number, number]> {
+  const zone = track.hazardZones?.find((z) => z.kind === 'ascent_caribbean')
   return (zone?.vertices ?? []) as Array<[number, number]>
 }
