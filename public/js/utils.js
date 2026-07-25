@@ -91,27 +91,10 @@ export function formatDriftDistance(km) {
   return `${km.toFixed(1)} km`
 }
 
-function pluralUnit(value, singular, plural) {
-  return `${value} ${value === 1 ? singular : plural}`
-}
-
+/** Elapsed ocean-drift duration since splashdown, in hours. */
 export function formatDriftDuration(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '—'
-  const total = Math.floor(seconds)
-  const days = Math.floor(total / 86400)
-  const h = Math.floor((total % 86400) / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (days > 0) {
-    return `${pluralUnit(days, 'day', 'days')} ${pluralUnit(h, 'hour', 'hours')}`
-  }
-  if (h > 0) {
-    return `${pluralUnit(h, 'hour', 'hours')} ${pluralUnit(m, 'minute', 'minutes')}`
-  }
-  if (m > 0) {
-    return `${pluralUnit(m, 'minute', 'minutes')} ${pluralUnit(s, 'second', 'seconds')}`
-  }
-  return pluralUnit(s, 'second', 'seconds')
+  return `${(seconds / 3600).toFixed(1)}H`
 }
 
 export function formatUpdateAge(seconds) {
