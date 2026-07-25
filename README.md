@@ -36,6 +36,14 @@ npm run build
 npm run preview
 ```
 
+## Flight path
+
+SpaceX’s public tracker only publishes the live fix plus a short forward prediction — it does not archive the flown ground track. The map path is assembled from:
+
+1. **Flight Club** public Flight 13 Ship (stage 2) simulation for ascent/coast
+2. The published **Indian Ocean landing corridor** for the banking reentry/approach (Flight Club ballistic coast does not model that maneuver and drifts north of the zone)
+3. The live **SpaceX splashdown fix** as the path endpoint
+
 ## Notes
 
 - Ship 40 is a Starship upper stage, not a maritime recovery ship.
