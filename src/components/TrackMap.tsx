@@ -3,6 +3,7 @@ import {
   CircleMarker,
   MapContainer,
   Marker,
+  Polygon,
   Polyline,
   Popup,
   TileLayer,
@@ -14,6 +15,7 @@ import {
   FLIGHT_PATH_SOURCE,
   LAUNCH_PAD,
   buildFlightPath,
+  getIndianOceanHazard,
 } from '../data/flight13Path'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
@@ -54,7 +56,7 @@ export function TrackMap({ ship }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
 
-  const { simulated, toSplashdown } = useMemo(
+  const { coast, landing, full } = useMemo(
     () =>
       buildFlightPath({
         lat: current.latitude,
@@ -64,10 +66,7 @@ export function TrackMap({ ship }: Props) {
     [current.latitude, current.longitude],
   )
 
-  const fitPath = useMemo(
-    () => [...simulated, ...toSplashdown],
-    [simulated, toSplashdown],
-  )
+  const hazard = useMemo(() => getIndianOceanHazard(), [])
 
   return (
     <div className="map-shell">
@@ -84,11 +83,26 @@ export function TrackMap({ ship }: Props) {
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
         />
-        <FitFlightPath path={fitPath} current={center} />
+        <FitFlightPath path={full} current={center} />
 
-        {simulated.length >= 2 && (
+        {hazard.length >= 3 && (
+          <Polygon
+            positions={hazard}
+            pathOptions={{
+              color: '#C9853A',
+              weight: 1,
+              opacity: 0.35,
+              fillColor: '#C9853A',
+              fillOpacity: 0.06,
+            }}
+          >
+            <Popup>Indian Ocean splashdown hazard zone</Popup>
+          </Polygon>
+        )}
+
+        {coast.length >= 2 && (
           <Polyline
-            positions={simulated}
+            positions={coast}
             pathOptions={{
               color: '#C9853A',
               weight: 3,
@@ -97,14 +111,14 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {toSplashdown.length >= 2 && (
+        {landing.length >= 2 && (
           <Polyline
-            positions={toSplashdown}
+            positions={landing}
             pathOptions={{
-              color: '#F0C27A',
-              weight: 2.5,
-              opacity: 0.85,
-              dashArray: '6 8',
+              color: '#C9853A',
+              weight: 3,
+              opacity: 0.9,
+              dashArray: '7 9',
             }}
           />
         )}
@@ -146,11 +160,12 @@ export function TrackMap({ ship }: Props) {
       </MapContainer>
 
       <p className="map-caption">
-        Solid path: {FLIGHT_PATH_SOURCE.name} Flight 13 Ship simulation (
+        Solid: Flight Club Ship coast (
         <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
-          open
+          sim
         </a>
-        ). Dashed leg: to live SpaceX splashdown fix. Scroll or +/− to zoom.
+        ). Dashed: landing corridor into the live SpaceX splashdown. Shaded:
+        published IO hazard zone. Scroll or +/− to zoom.
       </p>
     </div>
   )

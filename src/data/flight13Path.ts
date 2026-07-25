@@ -27,25 +27,67 @@ export const FLIGHT_PATH_SOURCE = {
   description: track.description,
 }
 
-/** Flight Club stage-2 ground track for Flight 13 (Ship). */
-export function getFlightClubTrack(): TrackPoint[] {
+export const SPLASHDOWN_FIX: LatLon = {
+  lat: track.splashdown.lat,
+  lon: track.splashdown.lon,
+  label: 'Ship 40 splashdown',
+}
+
+const coastEnd = track.segments.coast_end_index
+const landingStart = track.segments.landing_start_index
+
+/** Full Ship ground-track points (coast + landing corridor). */
+export function getFlightTrack(): TrackPoint[] {
   return track.points as TrackPoint[]
 }
 
 /**
- * Full display path: Flight Club simulated Ship track, then a final leg to the
- * live SpaceX splashdown fix (sim ends before touchdown).
+ * Display path segments:
+ * - coast: Flight Club stage-2 simulation through IO landing-corridor entry
+ * - landing: published landing-corridor approach to the SpaceX splashdown fix
+ *
+ * If a live splashdown fix differs from the bundled one, the landing segment is
+ * gently retargeted so the path still ends on the live marker.
  */
-export function buildFlightPath(splashdown: LatLon): {
-  simulated: Array<[number, number]>
-  toSplashdown: Array<[number, number]>
+export function buildFlightPath(liveSplashdown?: LatLon): {
+  coast: Array<[number, number]>
+  landing: Array<[number, number]>
+  full: Array<[number, number]>
 } {
-  const simulated = getFlightClubTrack().map(
-    (p) => [p.lat, p.lon] as [number, number],
+  const points = getFlightTrack()
+  const coast = points
+    .slice(0, coastEnd + 1)
+    .map((p) => [p.lat, p.lon] as [number, number])
+
+  let landing = points
+    .slice(landingStart)
+    .map((p) => [p.lat, p.lon] as [number, number])
+
+  // Keep continuity at the splice.
+  if (coast.length && landing.length) {
+    landing = [coast[coast.length - 1], ...landing]
+  }
+
+  if (liveSplashdown && landing.length) {
+    const bundled = points[points.length - 1]
+    const dLat = liveSplashdown.lat - bundled.lat
+    const dLon = liveSplashdown.lon - bundled.lon
+    if (Math.abs(dLat) > 1e-5 || Math.abs(dLon) > 1e-5) {
+      const n = landing.length
+      landing = landing.map(([lat, lon], i) => {
+        const w = n <= 1 ? 1 : i / (n - 1)
+        return [lat + dLat * w, lon + dLon * w] as [number, number]
+      })
+    }
+  }
+
+  return { coast, landing, full: [...coast, ...landing.slice(1)] }
+}
+
+/** Indian Ocean splashdown hazard polygon (Flight Club mission data). */
+export function getIndianOceanHazard(): Array<[number, number]> {
+  const zone = track.hazardZones?.find((z) =>
+    z.vertices.some(([lat, lon]) => lat < -10 && lon > 70),
   )
-  const last = simulated[simulated.length - 1]
-  const toSplashdown: Array<[number, number]> = last
-    ? [last, [splashdown.lat, splashdown.lon]]
-    : [[splashdown.lat, splashdown.lon]]
-  return { simulated, toSplashdown }
+  return (zone?.vertices ?? []) as Array<[number, number]>
 }
