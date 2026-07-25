@@ -58,6 +58,18 @@ export const LANDING_FIX: LatLon = {
   label: track.landingFix.label,
 }
 
+/** Mission elapsed seconds at splashdown — start of ocean drift. */
+export const SPLASHDOWN_MISSION_TIME: number =
+  typeof track.landingFix.mission_time === 'number'
+    ? track.landingFix.mission_time
+    : 3990.1
+
+/** GPS time at splashdown — start of ocean drift. */
+export const SPLASHDOWN_GPS_TIME: number =
+  typeof track.landingFix.gps_time === 'number'
+    ? track.landingFix.gps_time
+    : 0
+
 /** Last GPS time included in the Space Notices archive — live trail starts after this. */
 export const ARCHIVE_END_GPS_TIME: number =
   (track as { archivedThrough?: { gps_time?: number } }).archivedThrough

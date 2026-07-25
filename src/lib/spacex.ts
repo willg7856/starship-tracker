@@ -202,6 +202,19 @@ export function formatDriftDistance(km: number): string {
   return `${km.toFixed(1)} km`
 }
 
+/** Elapsed ocean-drift duration since splashdown. */
+export function formatDriftDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—'
+  const total = Math.floor(seconds)
+  const days = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  if (days > 0) return `${days}D ${h}H`
+  if (h > 0) return `${h}H ${String(m).padStart(2, '0')}M`
+  if (m > 0) return `${m}M`
+  return `${total}S`
+}
+
 export function isNearSurface(altitudeM: number): boolean {
   return Number.isFinite(altitudeM) && altitudeM > -500 && altitudeM < 2000
 }

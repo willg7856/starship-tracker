@@ -503,7 +503,7 @@ select {
   }
 
   .telemetry-grid.with-drift {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .telemetry-grid.with-still {
@@ -554,7 +554,7 @@ select {
   text-transform: uppercase;
 }
 
-.telemetry-grid.with-drift > div:last-child dd {
+.telemetry-grid.with-drift > div:nth-last-child(-n + 2) dd {
   color: var(--ignition);
 }
 

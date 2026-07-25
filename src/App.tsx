@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TrackMap } from './components/TrackMap'
 import { useShip40 } from './hooks/useShip40'
-import { LANDING_FIX } from './data/flight13Path'
+import { LANDING_FIX, SPLASHDOWN_MISSION_TIME } from './data/flight13Path'
 import {
   SPACEX_VEHICLE_TRACKER,
   bearingDegrees,
@@ -9,6 +9,7 @@ import {
   formatAltitudeKm,
   formatBearingCardinal,
   formatDriftDistance,
+  formatDriftDuration,
   formatLatLon,
   formatMissionClock,
   formatSpeedKmh,
@@ -64,12 +65,17 @@ function App() {
       current.latitude,
       current.longitude,
     )
+    const driftingSeconds = Math.max(
+      0,
+      current.mission_time - SPLASHDOWN_MISSION_TIME,
+    )
     return {
       label: formatDriftDistance(km),
       direction:
         km < 0.05
           ? 'at splashdown'
           : formatBearingCardinal(bearing),
+      duration: formatDriftDuration(driftingSeconds),
     }
   }, [current])
 
@@ -205,6 +211,14 @@ function App() {
                   <dt>Ocean drift</dt>
                   <dd>
                     {drift.label} <span>{drift.direction}</span>
+                  </dd>
+                </div>
+              )}
+              {drift && (
+                <div>
+                  <dt>Time drifting</dt>
+                  <dd>
+                    {drift.duration} <span>since splashdown</span>
                   </dd>
                 </div>
               )}
