@@ -229,7 +229,7 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {/* Archived post-splashdown track (same samples Space Notices plots) */}
+        {/* Archived post-splashdown track + live tip — dotted to mark ocean drift */}
         {oceanDrift.length >= 2 && (
           <Polyline
             positions={oceanDrift}
@@ -237,6 +237,7 @@ export function TrackMap({ ship }: Props) {
               color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
               opacity: 0.95,
+              dashArray: '6 8',
             }}
           />
         )}
@@ -247,9 +248,9 @@ export function TrackMap({ ship }: Props) {
             positions={liveDriftStub}
             pathOptions={{
               color: '#ffc400',
-              weight: view === 'drift' ? 4 : 2,
-              opacity: 0.85,
-              dashArray: '4 6',
+              weight: view === 'drift' ? 4 : 2.5,
+              opacity: 0.95,
+              dashArray: '6 8',
             }}
           />
         )}
