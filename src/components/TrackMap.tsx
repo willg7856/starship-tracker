@@ -97,7 +97,8 @@ export function TrackMap({ ship }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
   const landed = isNearSurface(current.altitude)
-  const [mode, setMode] = useState<ViewMode>(landed ? 'drift' : 'flight')
+  // Default to full flight so the whole Trajectory is visible; drift is opt-in.
+  const [mode, setMode] = useState<ViewMode>('flight')
 
   const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
   const notices = useMemo(() => getNoticePolygons(), [])
@@ -120,7 +121,6 @@ export function TrackMap({ ship }: Props) {
   }, [landed, oceanDrift, current.latitude, current.longitude])
 
   const view = landed ? mode : 'flight'
-  const showFlightLayers = view === 'flight'
 
   return (
     <div className="map-shell">
@@ -165,7 +165,8 @@ export function TrackMap({ ship }: Props) {
           live={center}
         />
 
-        {showFlightLayers &&
+        {/* Notice polygons only in full-flight view (they clutter the close-up). */}
+        {view === 'flight' &&
           notices.map((group) =>
             group.polygons.map((poly, idx) => (
               <Polygon
@@ -198,24 +199,25 @@ export function TrackMap({ ship }: Props) {
             )),
           )}
 
-        {showFlightLayers && ascent.length >= 2 && (
+        {/* Always draw the full Flight 13 tracker path (ascent + reentry). */}
+        {ascent.length >= 2 && (
           <Polyline
             positions={ascent}
             pathOptions={{
               color: '#C9853A',
               weight: 3,
-              opacity: 0.95,
+              opacity: view === 'flight' ? 0.95 : 0.55,
             }}
           />
         )}
 
-        {showFlightLayers && reentry.length >= 2 && (
+        {reentry.length >= 2 && (
           <Polyline
             positions={reentry}
             pathOptions={{
               color: '#E0A85A',
               weight: 3,
-              opacity: 0.95,
+              opacity: view === 'flight' ? 0.95 : 0.55,
             }}
           />
         )}
@@ -245,15 +247,13 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {showFlightLayers && (
-          <Marker position={[LAUNCH_PAD.lat, LAUNCH_PAD.lon]} icon={launchIcon}>
-            <Popup>
-              <strong>Liftoff</strong>
-              <br />
-              {LAUNCH_PAD.label}
-            </Popup>
-          </Marker>
-        )}
+        <Marker position={[LAUNCH_PAD.lat, LAUNCH_PAD.lon]} icon={launchIcon}>
+          <Popup>
+            <strong>Liftoff</strong>
+            <br />
+            {LAUNCH_PAD.label}
+          </Popup>
+        </Marker>
 
         {landed && (
           <Marker
@@ -301,21 +301,21 @@ export function TrackMap({ ship }: Props) {
       <p className="map-caption">
         {view === 'drift' ? (
           <>
-            Close-up of archived post-splashdown track from{' '}
+            Drift close-up — full Flight 13 path stays on the map (dimmed). Open
+            ring = splashdown; filled = live. Source:{' '}
             <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
               Space Notices
             </a>
-            . Open ring = splashdown; filled = live. Dashed tip = since archive
-            ended. Zoom freely — view won’t reset on telemetry refresh.
+            .
           </>
         ) : (
           <>
-            Full tracker series from{' '}
+            Full Flight 13 tracker path from{' '}
             <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
               Space Notices
             </a>{' '}
-            (same Trajectory points): copper ascent, lighter reentry, gold ocean
-            drift. Shaded = AHA / nav-warning areas.
+            (liftoff → splashdown → ocean drift). Copper = ascent/coast, lighter
+            = reentry, gold = post-landing. Shaded = AHA / nav-warning areas.
           </>
         )}{' '}
         Scroll or +/− to zoom.
