@@ -95,7 +95,12 @@ function App() {
       <section className="hero">
         <div className="hero-grid-bg" aria-hidden="true" />
         <div className="hero-inner">
-          <p className="hero-eyebrow">Beyond Stage Zero · Flight 13</p>
+          <p className="hero-eyebrow">Flight 13 · Starship</p>
+          <p className="hero-brand" aria-label="Beyond Stage Zero">
+            <span className="brand-logo-bracket">[</span>
+            Beyond Stage Zero
+            <span className="brand-logo-bracket">]</span>
+          </p>
           <h1 className="hero-h1">
             Ship 40
             <span className="hero-h1-divider" />
