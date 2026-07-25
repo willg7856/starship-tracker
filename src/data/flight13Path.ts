@@ -43,6 +43,14 @@ export const LANDING_FIX: LatLon = {
   label: track.landingFix.label,
 }
 
+/** Last GPS time included in the Space Notices archive — live trail starts after this. */
+export const ARCHIVE_END_GPS_TIME: number =
+  (track as { archivedThrough?: { gps_time?: number } }).archivedThrough
+    ?.gps_time ??
+  (typeof track.landingFix.gps_time === 'number'
+    ? track.landingFix.gps_time
+    : 0)
+
 const entryIndex = track.segments.entry_index
 const splashIndex = track.segments.splashdown_index
 

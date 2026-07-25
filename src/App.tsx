@@ -193,8 +193,9 @@ function App() {
                 >
                   Space Notices
                 </a>{' '}
-                ({drift.baseline}). The path after the archive grows from each
-                new SpaceX fix (~every 10s) and is kept in this browser.
+                ({drift.baseline}). The map uses the Space Notices archive
+                through the latest published sample, then grows its own path
+                from each new SpaceX fix (~every 10s) in this browser.
               </p>
             )}
 

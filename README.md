@@ -38,9 +38,11 @@ npm run preview
 
 ## Flight path
 
-SpaceX’s live tracker only keeps the current fix plus a short forward prediction. The full Flight 13 ground track on the map comes from the archived SpaceX vehicle-tracker series published by [Space Notices](https://space-notices.com/entry/launch-starship-flight-13) (liftoff → splashdown), along with the associated AHA / nav-warning polygons.
+SpaceX’s live tracker only keeps the current fix plus a short forward prediction. The flown Flight 13 ground track on the map comes from the archived SpaceX vehicle-tracker series published by [Space Notices](https://space-notices.com/entry/launch-starship-flight-13) (liftoff → splashdown → post-landing drift), along with the associated AHA / nav-warning polygons.
 
-**Ocean drift** is the great-circle distance from that archived splashdown fix to the live SpaceX position.
+After that archive ends, this site records its own live trail from SpaceX’s public tracker (~every 10 seconds) in the browser.
+
+**Ocean drift** is the great-circle distance from the archived splashdown fix to the live SpaceX position.
 
 ## Notes
 
