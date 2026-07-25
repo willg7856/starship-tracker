@@ -43,34 +43,32 @@ export const LANDING_FIX: LatLon = {
   label: track.landingFix.label,
 }
 
-const entryIndex = track.segments.entry_index ?? track.segments.coast_end_index
+const entryIndex = track.segments.entry_index
+const splashIndex = track.segments.splashdown_index
 
 export function getFlightTrack(): TrackPoint[] {
   return track.points as TrackPoint[]
 }
 
 /**
- * Display path:
- * - coast: exoatmospheric / high-altitude track
- * - landing: from ~entry interface down to splashdown
- * Both come from the same archived SpaceX tracker series.
+ * Path segments from the Space Notices archive (same series as their
+ * yellow Trajectory layer — every archived tracker sample).
  */
 export function buildFlightPath(): {
-  coast: Array<[number, number]>
-  landing: Array<[number, number]>
+  ascent: Array<[number, number]>
+  reentry: Array<[number, number]>
+  oceanDrift: Array<[number, number]>
   full: Array<[number, number]>
 } {
   const points = getFlightTrack()
-  const coast = points
-    .slice(0, entryIndex + 1)
-    .map((p) => [p.lat, p.lon] as [number, number])
-  let landing = points
-    .slice(entryIndex)
-    .map((p) => [p.lat, p.lon] as [number, number])
-  if (coast.length && landing.length) {
-    landing = [coast[coast.length - 1], ...landing.slice(1)]
-  }
-  return { coast, landing, full: [...coast, ...landing.slice(1)] }
+  const toLatLon = (p: TrackPoint) => [p.lat, p.lon] as [number, number]
+
+  const ascent = points.slice(0, entryIndex + 1).map(toLatLon)
+  const reentry = points.slice(entryIndex, splashIndex + 1).map(toLatLon)
+  const oceanDrift = points.slice(splashIndex).map(toLatLon)
+  const full = points.map(toLatLon)
+
+  return { ascent, reentry, oceanDrift, full }
 }
 
 export function getNoticePolygons(): NoticePolygonGroup[] {

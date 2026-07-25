@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CircleMarker,
   MapContainer,
@@ -42,32 +42,53 @@ const landingIcon = L.divIcon({
   iconAnchor: [7, 7],
 })
 
-function FitBounds({
+/**
+ * Fit the map once per view-mode change only.
+ * Do NOT re-fit when live telemetry updates — that fights manual zoom.
+ */
+function FitBoundsOnModeChange({
   mode,
   fullPath,
-  driftBounds,
-  current,
+  driftPoints,
+  live,
 }: {
   mode: ViewMode
   fullPath: Array<[number, number]>
-  driftBounds: Array<[number, number]>
-  current: LatLngExpression
+  driftPoints: Array<[number, number]>
+  live: LatLngExpression
 }) {
   const map = useMap()
+  const fittedMode = useRef<ViewMode | null>(null)
+  const fullPathRef = useRef(fullPath)
+  const driftPointsRef = useRef(driftPoints)
+  const liveRef = useRef(live)
+  fullPathRef.current = fullPath
+  driftPointsRef.current = driftPoints
+  liveRef.current = live
 
   useEffect(() => {
-    if (mode === 'drift' && driftBounds.length >= 1) {
-      const bounds = L.latLngBounds(driftBounds.map(([lat, lon]) => [lat, lon]))
-      bounds.extend(current)
-      map.fitBounds(bounds.pad(0.55), { animate: false, maxZoom: 10 })
+    if (fittedMode.current === mode) return
+    fittedMode.current = mode
+
+    const liveNow = liveRef.current
+
+    if (mode === 'drift') {
+      const pts = driftPointsRef.current
+      const bounds = L.latLngBounds(
+        pts.length > 0 ? pts : [[LANDING_FIX.lat, LANDING_FIX.lon]],
+      )
+      bounds.extend(liveNow)
+      map.fitBounds(bounds.pad(0.35), { animate: false })
       return
     }
-    if (fullPath.length >= 2) {
-      const bounds = L.latLngBounds(fullPath.map(([lat, lon]) => [lat, lon]))
-      bounds.extend(current)
+
+    const path = fullPathRef.current
+    if (path.length >= 2) {
+      const bounds = L.latLngBounds(path)
+      bounds.extend(liveNow)
       map.fitBounds(bounds.pad(0.08), { animate: false })
     }
-  }, [mode, fullPath, driftBounds, current, map])
+  }, [mode, map])
 
   return null
 }
@@ -78,25 +99,25 @@ export function TrackMap({ ship }: Props) {
   const landed = isNearSurface(current.altitude)
   const [mode, setMode] = useState<ViewMode>(landed ? 'drift' : 'flight')
 
-  const { coast, landing, full } = useMemo(() => buildFlightPath(), [])
+  const { ascent, reentry, oceanDrift, full } = useMemo(() => buildFlightPath(), [])
   const notices = useMemo(() => getNoticePolygons(), [])
 
-  const driftBounds = useMemo(
-    () =>
-      [
-        [LANDING_FIX.lat, LANDING_FIX.lon],
-        [current.latitude, current.longitude],
-      ] as Array<[number, number]>,
-    [current.latitude, current.longitude],
-  )
+  // Archived ocean-drift track + live tip for close-up framing at mode switch.
+  const driftFrame = useMemo(() => {
+    const pts: Array<[number, number]> = oceanDrift.length
+      ? [...oceanDrift]
+      : [[LANDING_FIX.lat, LANDING_FIX.lon]]
+    pts.push([current.latitude, current.longitude])
+    return pts
+  }, [oceanDrift, current.latitude, current.longitude])
 
-  const driftLine = useMemo(() => {
-    if (!landed) return null
-    const a: [number, number] = [LANDING_FIX.lat, LANDING_FIX.lon]
-    const b: [number, number] = [current.latitude, current.longitude]
-    if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-7) return null
-    return [a, b] as Array<[number, number]>
-  }, [landed, current.latitude, current.longitude])
+  const liveDriftStub = useMemo(() => {
+    if (!landed || oceanDrift.length === 0) return null
+    const last = oceanDrift[oceanDrift.length - 1]
+    const live: [number, number] = [current.latitude, current.longitude]
+    if (Math.hypot(last[0] - live[0], last[1] - live[1]) < 1e-7) return null
+    return [last, live] as Array<[number, number]>
+  }, [landed, oceanDrift, current.latitude, current.longitude])
 
   const view = landed ? mode : 'flight'
   const showFlightLayers = view === 'flight'
@@ -130,16 +151,18 @@ export function TrackMap({ ship }: Props) {
         zoomControl
         attributionControl={false}
         worldCopyJump
+        maxZoom={18}
       >
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
+          maxZoom={18}
         />
-        <FitBounds
+        <FitBoundsOnModeChange
           mode={view}
           fullPath={full}
-          driftBounds={driftBounds}
-          current={center}
+          driftPoints={driftFrame}
+          live={center}
         />
 
         {showFlightLayers &&
@@ -175,9 +198,9 @@ export function TrackMap({ ship }: Props) {
             )),
           )}
 
-        {showFlightLayers && coast.length >= 2 && (
+        {showFlightLayers && ascent.length >= 2 && (
           <Polyline
-            positions={coast}
+            positions={ascent}
             pathOptions={{
               color: '#C9853A',
               weight: 3,
@@ -186,24 +209,38 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {showFlightLayers && landing.length >= 2 && (
+        {showFlightLayers && reentry.length >= 2 && (
           <Polyline
-            positions={landing}
+            positions={reentry}
             pathOptions={{
-              color: '#F0C27A',
+              color: '#E0A85A',
               weight: 3,
               opacity: 0.95,
             }}
           />
         )}
 
-        {driftLine && (
+        {/* Archived post-splashdown track (same samples Space Notices plots) */}
+        {oceanDrift.length >= 2 && (
           <Polyline
-            positions={driftLine}
+            positions={oceanDrift}
+            pathOptions={{
+              color: '#F0C27A',
+              weight: view === 'drift' ? 4 : 2.5,
+              opacity: 0.95,
+            }}
+          />
+        )}
+
+        {/* Short stub from end of archive to current live fix */}
+        {liveDriftStub && (
+          <Polyline
+            positions={liveDriftStub}
             pathOptions={{
               color: '#F0C27A',
               weight: view === 'drift' ? 4 : 2,
-              opacity: 1,
+              opacity: 0.85,
+              dashArray: '4 6',
             }}
           />
         )}
@@ -264,23 +301,21 @@ export function TrackMap({ ship }: Props) {
       <p className="map-caption">
         {view === 'drift' ? (
           <>
-            Close-up: open ring = splashdown fix from Space Notices archive;
-            filled = live SpaceX position. Gold line = ocean drift (~
-            {Math.round(
-              L.latLng(LANDING_FIX.lat, LANDING_FIX.lon).distanceTo(
-                L.latLng(current.latitude, current.longitude),
-              ) / 1000,
-            )}{' '}
-            km).
+            Close-up of archived post-splashdown track from{' '}
+            <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
+              Space Notices
+            </a>
+            . Open ring = splashdown; filled = live. Dashed tip = since archive
+            ended. Zoom freely — view won’t reset on telemetry refresh.
           </>
         ) : (
           <>
-            Track from{' '}
+            Full tracker series from{' '}
             <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
               Space Notices
             </a>{' '}
-            archived SpaceX vehicle-tracker fixes (liftoff → splashdown). Shaded
-            polygons: published AHA / nav-warning areas.
+            (same Trajectory points): copper ascent, lighter reentry, gold ocean
+            drift. Shaded = AHA / nav-warning areas.
           </>
         )}{' '}
         Scroll or +/− to zoom.
