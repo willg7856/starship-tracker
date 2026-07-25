@@ -10,7 +10,11 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import type { LatLngExpression } from 'leaflet'
-import { buildFlightPath, LAUNCH_PAD } from '../data/flight13Path'
+import {
+  FLIGHT_PATH_SOURCE,
+  LAUNCH_PAD,
+  buildFlightPath,
+} from '../data/flight13Path'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
 
@@ -39,7 +43,7 @@ function FitFlightPath({
     if (fitted.current || path.length < 2) return
     const bounds = L.latLngBounds(path.map(([lat, lon]) => [lat, lon]))
     bounds.extend(current)
-    map.fitBounds(bounds.pad(0.12), { animate: false })
+    map.fitBounds(bounds.pad(0.08), { animate: false })
     fitted.current = true
   }, [path, current, map])
 
@@ -50,7 +54,7 @@ export function TrackMap({ ship }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
 
-  const flightPath = useMemo(
+  const { simulated, toSplashdown } = useMemo(
     () =>
       buildFlightPath({
         lat: current.latitude,
@@ -58,6 +62,11 @@ export function TrackMap({ ship }: Props) {
         label: 'Ship 40 splashdown',
       }),
     [current.latitude, current.longitude],
+  )
+
+  const fitPath = useMemo(
+    () => [...simulated, ...toSplashdown],
+    [simulated, toSplashdown],
   )
 
   return (
@@ -75,15 +84,27 @@ export function TrackMap({ ship }: Props) {
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
         />
-        <FitFlightPath path={flightPath} current={center} />
+        <FitFlightPath path={fitPath} current={center} />
 
-        {flightPath.length >= 2 && (
+        {simulated.length >= 2 && (
           <Polyline
-            positions={flightPath}
+            positions={simulated}
             pathOptions={{
               color: '#C9853A',
               weight: 3,
-              opacity: 0.92,
+              opacity: 0.95,
+            }}
+          />
+        )}
+
+        {toSplashdown.length >= 2 && (
+          <Polyline
+            positions={toSplashdown}
+            pathOptions={{
+              color: '#F0C27A',
+              weight: 2.5,
+              opacity: 0.85,
+              dashArray: '6 8',
             }}
           />
         )}
@@ -125,8 +146,11 @@ export function TrackMap({ ship }: Props) {
       </MapContainer>
 
       <p className="map-caption">
-        Flight path: public Flight 13 southeast corridor + live SpaceX
-        splashdown fix. Scroll or use +/− to zoom.
+        Solid path: {FLIGHT_PATH_SOURCE.name} Flight 13 Ship simulation (
+        <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
+          open
+        </a>
+        ). Dashed leg: to live SpaceX splashdown fix. Scroll or +/− to zoom.
       </p>
     </div>
   )

@@ -271,7 +271,6 @@ a {
 }
 
 .map-caption {
-  pointer-events: none;
   position: absolute;
   left: 0.75rem;
   right: 4.5rem;
@@ -285,6 +284,13 @@ a {
   font-size: 0.65rem;
   line-height: 1.35;
   letter-spacing: 0.02em;
+}
+
+.map-caption a {
+  color: var(--flare);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  pointer-events: auto;
 }
 
 .path-marker {
