@@ -27,11 +27,15 @@ export const FLIGHT_PATH_SOURCE = {
   description: track.description,
 }
 
-/** First public SpaceX splashdown fix after Flight 13 landing (frozen for drift). */
+/**
+ * First public SpaceX splashdown-area fix we recorded after Flight 13.
+ * Used as the frozen baseline for ocean-drift distance — not the exact
+ * touchdown instant (SpaceX does not publish that separately).
+ */
 export const LANDING_FIX: LatLon = {
   lat: track.landingFix?.lat ?? track.splashdown.lat,
   lon: track.landingFix?.lon ?? track.splashdown.lon,
-  label: track.landingFix?.label ?? 'Splashdown',
+  label: track.landingFix?.label ?? 'First tracked splashdown fix',
 }
 
 const coastEnd = track.segments.coast_end_index

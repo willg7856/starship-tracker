@@ -46,8 +46,9 @@ function App() {
       label: formatDriftDistance(km),
       direction:
         km < 0.05
-          ? 'on splashdown fix'
-          : `${formatBearingCardinal(bearing)} of splashdown`,
+          ? 'still on first tracked fix'
+          : `moved ${formatBearingCardinal(bearing)}`,
+      baseline: formatLatLon(LANDING_FIX.lat, LANDING_FIX.lon),
     }
   }, [current])
 
@@ -137,7 +138,7 @@ function App() {
             </div>
             {drift && (
               <div>
-                <dt>Drift since landing</dt>
+                <dt>Ocean drift</dt>
                 <dd>
                   {drift.label}{' '}
                   <span>{drift.direction}</span>
@@ -145,6 +146,14 @@ function App() {
               </div>
             )}
           </dl>
+
+          {drift && (
+            <p className="drift-note">
+              Drift is live SpaceX position minus the first public splashdown fix
+              we recorded ({drift.baseline}) — not an official SpaceX drift
+              product, and not measured from the exact touchdown second.
+            </p>
+          )}
 
           <p className="source-line">
             Source: SpaceX starship_tracker_public.json via /api/tracker

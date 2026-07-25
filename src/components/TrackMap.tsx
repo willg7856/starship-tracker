@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CircleMarker,
   MapContainer,
@@ -21,13 +21,15 @@ import {
   getFaaReentryCorridor,
   getIndianOceanHazard,
 } from '../data/flight13Path'
-import { isNearSurface } from '../lib/spacex'
+import { formatLatLon, isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
 import 'leaflet/dist/leaflet.css'
 
 type Props = {
   ship: ShipTrack
 }
+
+type ViewMode = 'drift' | 'flight'
 
 const launchIcon = L.divIcon({
   className: 'path-marker launch-marker',
@@ -39,27 +41,37 @@ const launchIcon = L.divIcon({
 const landingIcon = L.divIcon({
   className: 'path-marker landing-marker',
   html: '<span></span>',
-  iconSize: [12, 12],
-  iconAnchor: [6, 6],
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
 })
 
-function FitFlightPath({
-  path,
+function FitBounds({
+  mode,
+  fullPath,
+  driftBounds,
   current,
 }: {
-  path: Array<[number, number]>
+  mode: ViewMode
+  fullPath: Array<[number, number]>
+  driftBounds: Array<[number, number]>
   current: LatLngExpression
 }) {
   const map = useMap()
-  const fitted = useRef(false)
 
   useEffect(() => {
-    if (fitted.current || path.length < 2) return
-    const bounds = L.latLngBounds(path.map(([lat, lon]) => [lat, lon]))
-    bounds.extend(current)
-    map.fitBounds(bounds.pad(0.08), { animate: false })
-    fitted.current = true
-  }, [path, current, map])
+    if (mode === 'drift' && driftBounds.length >= 1) {
+      const bounds = L.latLngBounds(driftBounds.map(([lat, lon]) => [lat, lon]))
+      bounds.extend(current)
+      // Keep a readable close-up even when drift is still small.
+      map.fitBounds(bounds.pad(0.85), { animate: false, maxZoom: 11 })
+      return
+    }
+    if (fullPath.length >= 2) {
+      const bounds = L.latLngBounds(fullPath.map(([lat, lon]) => [lat, lon]))
+      bounds.extend(current)
+      map.fitBounds(bounds.pad(0.08), { animate: false })
+    }
+  }, [mode, fullPath, driftBounds, current, map])
 
   return null
 }
@@ -68,6 +80,7 @@ export function TrackMap({ ship }: Props) {
   const current = ship.current
   const center: LatLngExpression = [current.latitude, current.longitude]
   const landed = isNearSurface(current.altitude)
+  const [mode, setMode] = useState<ViewMode>(landed ? 'drift' : 'flight')
 
   const { coast, landing, full } = useMemo(() => buildFlightPath(), [])
   const booster = useMemo(() => getBoosterTrack(), [])
@@ -75,19 +88,50 @@ export function TrackMap({ ship }: Props) {
   const reentry = useMemo(() => getFaaReentryCorridor(), [])
   const ascent = useMemo(() => getAscentHazard(), [])
 
+  const driftBounds = useMemo(() => {
+    const pts: Array<[number, number]> = [
+      [LANDING_FIX.lat, LANDING_FIX.lon],
+      [current.latitude, current.longitude],
+    ]
+    return pts
+  }, [current.latitude, current.longitude])
+
   const driftLine = useMemo(() => {
     if (!landed) return null
     const a: [number, number] = [LANDING_FIX.lat, LANDING_FIX.lon]
     const b: [number, number] = [current.latitude, current.longitude]
-    if (Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6) return null
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-7) return null
     return [a, b] as Array<[number, number]>
   }, [landed, current.latitude, current.longitude])
 
+  // If the ship is still flying, force full-flight view.
+  const view = landed ? mode : 'flight'
+  const showFlightLayers = view === 'flight'
+
   return (
     <div className="map-shell">
+      {landed && (
+        <div className="map-view-toggle" role="group" aria-label="Map view">
+          <button
+            type="button"
+            className={view === 'drift' ? 'active' : undefined}
+            onClick={() => setMode('drift')}
+          >
+            Drift close-up
+          </button>
+          <button
+            type="button"
+            className={view === 'flight' ? 'active' : undefined}
+            onClick={() => setMode('flight')}
+          >
+            Full flight
+          </button>
+        </div>
+      )}
+
       <MapContainer
         center={center}
-        zoom={3}
+        zoom={landed ? 10 : 3}
         className="track-map"
         scrollWheelZoom
         zoomControl
@@ -98,9 +142,14 @@ export function TrackMap({ ship }: Props) {
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
         />
-        <FitFlightPath path={full} current={center} />
+        <FitBounds
+          mode={view}
+          fullPath={full}
+          driftBounds={driftBounds}
+          current={center}
+        />
 
-        {ascent.length >= 3 && (
+        {showFlightLayers && ascent.length >= 3 && (
           <Polygon
             positions={ascent}
             pathOptions={{
@@ -113,7 +162,7 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {reentry.length >= 3 && (
+        {showFlightLayers && reentry.length >= 3 && (
           <Polygon
             positions={reentry}
             pathOptions={{
@@ -128,7 +177,7 @@ export function TrackMap({ ship }: Props) {
           </Polygon>
         )}
 
-        {ioHazard.length >= 3 && (
+        {showFlightLayers && ioHazard.length >= 3 && (
           <Polygon
             positions={ioHazard}
             pathOptions={{
@@ -143,7 +192,7 @@ export function TrackMap({ ship }: Props) {
           </Polygon>
         )}
 
-        {booster.length >= 2 && (
+        {showFlightLayers && booster.length >= 2 && (
           <Polyline
             positions={booster}
             pathOptions={{
@@ -155,7 +204,7 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {coast.length >= 2 && (
+        {showFlightLayers && coast.length >= 2 && (
           <Polyline
             positions={coast}
             pathOptions={{
@@ -166,7 +215,7 @@ export function TrackMap({ ship }: Props) {
           />
         )}
 
-        {landing.length >= 2 && (
+        {showFlightLayers && landing.length >= 2 && (
           <Polyline
             positions={landing}
             pathOptions={{
@@ -183,19 +232,21 @@ export function TrackMap({ ship }: Props) {
             positions={driftLine}
             pathOptions={{
               color: '#F0C27A',
-              weight: 2,
-              opacity: 0.95,
+              weight: view === 'drift' ? 4 : 2,
+              opacity: 1,
             }}
           />
         )}
 
-        <Marker position={[LAUNCH_PAD.lat, LAUNCH_PAD.lon]} icon={launchIcon}>
-          <Popup>
-            <strong>Liftoff</strong>
-            <br />
-            {LAUNCH_PAD.label}
-          </Popup>
-        </Marker>
+        {showFlightLayers && (
+          <Marker position={[LAUNCH_PAD.lat, LAUNCH_PAD.lon]} icon={launchIcon}>
+            <Popup>
+              <strong>Liftoff</strong>
+              <br />
+              {LAUNCH_PAD.label}
+            </Popup>
+          </Marker>
+        )}
 
         {landed && (
           <Marker
@@ -203,16 +254,18 @@ export function TrackMap({ ship }: Props) {
             icon={landingIcon}
           >
             <Popup>
-              <strong>Splashdown</strong>
+              <strong>First tracked fix</strong>
               <br />
-              First public SpaceX fix
+              {formatLatLon(LANDING_FIX.lat, LANDING_FIX.lon)}
+              <br />
+              Baseline used for drift
             </Popup>
           </Marker>
         )}
 
         <CircleMarker
           center={center}
-          radius={9}
+          radius={view === 'drift' ? 11 : 9}
           pathOptions={{
             color: '#F0C27A',
             fillColor: '#F0C27A',
@@ -221,14 +274,14 @@ export function TrackMap({ ship }: Props) {
           }}
         >
           <Popup>
-            <strong>Ship 40</strong>
+            <strong>Ship 40 now</strong>
             <br />
-            {landed ? 'Live position (drifting)' : 'Live SpaceX fix'}
+            {formatLatLon(current.latitude, current.longitude)}
           </Popup>
         </CircleMarker>
         <CircleMarker
           center={center}
-          radius={18}
+          radius={view === 'drift' ? 22 : 18}
           pathOptions={{
             color: '#F0C27A',
             fillOpacity: 0,
@@ -239,13 +292,22 @@ export function TrackMap({ ship }: Props) {
       </MapContainer>
 
       <p className="map-caption">
-        Copper solid: Flight Club Ship coast. Dashed: FAA Stage 2 reentry
-        corridor to splashdown (
-        <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
-          FC sim
-        </a>
-        ). Gold stub: drift since landing. SpaceX does not publish a full archived
-        ground track. Scroll or +/− to zoom.
+        {view === 'drift' ? (
+          <>
+            Close-up: open ring = first tracked splashdown fix; filled = live
+            SpaceX position. Gold line = drift between them.
+          </>
+        ) : (
+          <>
+            Copper solid: Flight Club Ship coast. Dashed: FAA Stage 2 reentry
+            corridor (
+            <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
+              FC sim
+            </a>
+            ). SpaceX does not publish a full archived ground track.
+          </>
+        )}{' '}
+        Scroll or +/− to zoom.
       </p>
     </div>
   )

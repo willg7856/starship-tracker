@@ -270,6 +270,46 @@ a {
   position: relative;
 }
 
+.map-view-toggle {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 500;
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid rgba(240, 194, 122, 0.35);
+  background: rgba(7, 26, 28, 0.88);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.map-view-toggle button {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  background: transparent;
+  color: var(--foam-dim);
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.map-view-toggle button + button {
+  border-left: 1px solid rgba(243, 240, 231, 0.12);
+}
+
+.map-view-toggle button.active {
+  color: var(--flare);
+  background: rgba(240, 194, 122, 0.12);
+}
+
+.map-view-toggle button:hover {
+  color: var(--foam);
+}
+
 .map-caption {
   position: absolute;
   left: 0.75rem;
@@ -474,6 +514,14 @@ a {
 .mission-note p {
   color: var(--foam-dim);
   line-height: 1.55;
+}
+
+.drift-note {
+  margin: 0.9rem 0 0;
+  color: var(--foam-dim);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  max-width: 46rem;
 }
 
 .source-line {
