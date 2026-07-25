@@ -60,130 +60,181 @@ function App() {
       }) + ' UTC'
     : null
 
+  const liveLabel = error
+    ? 'OFFLINE'
+    : loading
+      ? 'LINKING'
+      : refreshing
+        ? 'SYNCING'
+        : 'LIVE'
+
   return (
     <div className="app">
-      <div className="atmosphere" aria-hidden="true" />
-
-      <header className="topbar">
-        <p className="brand">SHIP 40</p>
-        <div className="live-pill" data-state={error ? 'error' : loading ? 'loading' : 'live'}>
-          <span className="live-dot" />
-          <span>
-            {error ? 'OFFLINE' : loading ? 'LINKING' : refreshing ? 'SYNCING' : 'LIVE'}
-          </span>
+      <header className="nav">
+        <div className="nav-inner">
+          <a className="brand-logo" href="https://www.beyondstagezero.com/">
+            <span className="brand-logo-mark" aria-hidden="true" />
+            <span className="brand-logo-text">
+              <span className="brand-logo-bracket">[</span>
+              BSZ
+              <span className="brand-logo-bracket">]</span>
+              <span className="brand-logo-sep">/</span>
+              SHIP 40
+            </span>
+          </a>
+          <div
+            className="live-badge"
+            data-state={error ? 'error' : loading ? 'loading' : 'live'}
+          >
+            <span className="live-dot" />
+            {liveLabel}
+          </div>
         </div>
       </header>
 
-      <main className="hero">
-        <section className="hero-copy">
-          <h1>Ship 40</h1>
-          <p className="lede">
-            Location pulled straight from SpaceX&apos;s public Starship vehicle
-            tracker — the same feed that powers spacex.com.
+      <section className="hero">
+        <div className="hero-grid-bg" aria-hidden="true" />
+        <div className="hero-inner">
+          <p className="hero-eyebrow">Beyond Stage Zero · Flight 13</p>
+          <h1 className="hero-h1">
+            Ship 40
+            <span className="hero-h1-divider" />
+            <span className="hero-h1-sub">Live tracker</span>
+          </h1>
+          <p className="hero-sub">
+            Location from SpaceX&apos;s public Starship vehicle tracker — the
+            same feed that powers spacex.com — with the Flight 13 ground track
+            archived by Space Notices.
           </p>
-
-          <div className="cta-row">
-            <a className="cta primary" href={SPACEX_MISSION_PAGE} target="_blank" rel="noreferrer">
+          <div className="hero-actions">
+            <a
+              className="btn btn-primary"
+              href={SPACEX_MISSION_PAGE}
+              target="_blank"
+              rel="noreferrer"
+            >
               Flight 13 on SpaceX
             </a>
-            <a className="cta ghost" href={SPACEX_VEHICLE_TRACKER} target="_blank" rel="noreferrer">
+            <a
+              className="btn btn-outline"
+              href={SPACEX_VEHICLE_TRACKER}
+              target="_blank"
+              rel="noreferrer"
+            >
               Official vehicle tracker
             </a>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="map-plane" aria-label="Ship 40 map">
+      <section className="map-section" aria-label="Ship 40 map">
+        <div className="map-frame">
           {current && ship ? (
             <TrackMap ship={ship} />
           ) : (
             <div className="map-skeleton">
-              {error ? (
-                <p>{error}</p>
-              ) : (
-                <p>Acquiring SpaceX telemetry…</p>
-              )}
+              {error ? <p>{error}</p> : <p>Acquiring SpaceX telemetry…</p>}
             </div>
           )}
-          <div className="map-scrim" aria-hidden="true" />
-        </section>
-      </main>
+        </div>
+      </section>
 
       {current && (
-        <section className="telemetry" aria-label="Ship 40 telemetry">
-          <div className="telemetry-head">
-            <h2>Last known fix</h2>
-            <p>{place}</p>
-          </div>
-
-          <dl className={`telemetry-grid${drift ? ' with-drift' : ''}`}>
-            <div>
-              <dt>Coordinates</dt>
-              <dd>{formatLatLon(current.latitude, current.longitude)}</dd>
-            </div>
-            <div>
-              <dt>Mission clock</dt>
-              <dd>{formatMissionClock(current.mission_time)}</dd>
-            </div>
-            <div>
-              <dt>Speed</dt>
-              <dd>
-                {formatSpeedKmh(current.speed)} <span>km/h</span>
-              </dd>
-            </div>
-            <div>
-              <dt>Altitude</dt>
-              <dd>
-                {formatAltitudeKm(current.altitude)} <span>km</span>
-              </dd>
-            </div>
-            {drift && (
+        <section className="section telemetry" aria-label="Ship 40 telemetry">
+          <div className="section-inner">
+            <div className="telemetry-head">
               <div>
-                <dt>Ocean drift</dt>
+                <p className="section-eyebrow">Telemetry</p>
+                <h2>Last known fix</h2>
+              </div>
+              <p className="telemetry-place">{place}</p>
+            </div>
+
+            <dl className={`telemetry-grid${drift ? ' with-drift' : ''}`}>
+              <div>
+                <dt>Coordinates</dt>
+                <dd>{formatLatLon(current.latitude, current.longitude)}</dd>
+              </div>
+              <div>
+                <dt>Mission clock</dt>
+                <dd>{formatMissionClock(current.mission_time)}</dd>
+              </div>
+              <div>
+                <dt>Speed</dt>
                 <dd>
-                  {drift.label}{' '}
-                  <span>{drift.direction}</span>
+                  {formatSpeedKmh(current.speed)} <span>km/h</span>
                 </dd>
               </div>
+              <div>
+                <dt>Altitude</dt>
+                <dd>
+                  {formatAltitudeKm(current.altitude)} <span>km</span>
+                </dd>
+              </div>
+              {drift && (
+                <div>
+                  <dt>Ocean drift</dt>
+                  <dd>
+                    {drift.label} <span>{drift.direction}</span>
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            {drift && (
+              <p className="drift-note">
+                Drift is live SpaceX position minus the splashdown fix archived
+                by{' '}
+                <a
+                  href="https://space-notices.com/entry/launch-starship-flight-13"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Space Notices
+                </a>{' '}
+                ({drift.baseline}) — the first near-surface tracker sample after
+                reentry.
+              </p>
             )}
-          </dl>
 
-          {drift && (
-            <p className="drift-note">
-              Drift is live SpaceX position minus the splashdown fix archived by{' '}
-              <a
-                href="https://space-notices.com/entry/launch-starship-flight-13"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Space Notices
-              </a>{' '}
-              ({drift.baseline}) — the first near-surface tracker sample after
-              reentry.
+            <p className="source-line">
+              Source: SpaceX starship_tracker_public.json via /api/tracker
+              {stamp ? ` · GPS ${stamp}` : ''}
+              {fetchedAt
+                ? ` · polled ${fetchedAt.toLocaleTimeString('en-US', {
+                    timeZone: 'UTC',
+                  })} UTC`
+                : ''}
             </p>
-          )}
-
-          <p className="source-line">
-            Source: SpaceX starship_tracker_public.json via /api/tracker
-            {stamp ? ` · GPS ${stamp}` : ''}
-            {fetchedAt
-              ? ` · polled ${fetchedAt.toLocaleTimeString('en-US', { timeZone: 'UTC' })} UTC`
-              : ''}
-          </p>
+          </div>
         </section>
       )}
 
       {mission?.paragraphs?.[0]?.content && (
-        <section className="mission-note">
-          <h2>{mission.title}</h2>
-          <p>{mission.paragraphs[0].content}</p>
+        <section className="section mission-note">
+          <div className="section-inner">
+            <p className="section-eyebrow">Mission</p>
+            <h2>{mission.title}</h2>
+            <p>{mission.paragraphs[0].content}</p>
+          </div>
         </section>
       )}
 
       <footer className="footer">
-        <p>
-          Unofficial tracker. Telemetry is published by SpaceX for their website
-          vehicle tracker and refreshes about every 10 seconds.
-        </p>
+        <div className="footer-inner">
+          <a className="brand-logo" href="https://www.beyondstagezero.com/">
+            <span className="brand-logo-mark" aria-hidden="true" />
+            <span className="brand-logo-text">
+              <span className="brand-logo-bracket">[</span>
+              BEYOND STAGE ZERO
+              <span className="brand-logo-bracket">]</span>
+            </span>
+          </a>
+          <p>
+            Unofficial Ship 40 tracker. Telemetry from SpaceX&apos;s public
+            vehicle tracker · refreshes about every 10 seconds.
+          </p>
+        </div>
       </footer>
     </div>
   )

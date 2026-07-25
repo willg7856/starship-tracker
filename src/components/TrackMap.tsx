@@ -175,18 +175,18 @@ export function TrackMap({ ship }: Props) {
                 pathOptions={{
                   color:
                     group.type === 'ADP_LINK_FILE'
-                      ? '#C9853A'
+                      ? '#ff5a1f'
                       : group.type === 'NAVWARNING'
-                        ? '#6E8B9A'
-                        : '#B4553A',
+                        ? '#2dc2d9'
+                        : '#e33636',
                   weight: 1,
                   opacity: 0.45,
                   fillColor:
                     group.type === 'ADP_LINK_FILE'
-                      ? '#C9853A'
+                      ? '#ff5a1f'
                       : group.type === 'NAVWARNING'
-                        ? '#6E8B9A'
-                        : '#B4553A',
+                        ? '#2dc2d9'
+                        : '#e33636',
                   fillOpacity: 0.06,
                 }}
               >
@@ -204,7 +204,7 @@ export function TrackMap({ ship }: Props) {
           <Polyline
             positions={ascent}
             pathOptions={{
-              color: '#C9853A',
+              color: '#ff5a1f',
               weight: 3,
               opacity: view === 'flight' ? 0.95 : 0.55,
             }}
@@ -215,7 +215,7 @@ export function TrackMap({ ship }: Props) {
           <Polyline
             positions={reentry}
             pathOptions={{
-              color: '#E0A85A',
+              color: '#e64613',
               weight: 3,
               opacity: view === 'flight' ? 0.95 : 0.55,
             }}
@@ -227,7 +227,7 @@ export function TrackMap({ ship }: Props) {
           <Polyline
             positions={oceanDrift}
             pathOptions={{
-              color: '#F0C27A',
+              color: '#ffc400',
               weight: view === 'drift' ? 4 : 2.5,
               opacity: 0.95,
             }}
@@ -239,7 +239,7 @@ export function TrackMap({ ship }: Props) {
           <Polyline
             positions={liveDriftStub}
             pathOptions={{
-              color: '#F0C27A',
+              color: '#ffc400',
               weight: view === 'drift' ? 4 : 2,
               opacity: 0.85,
               dashArray: '4 6',
@@ -274,8 +274,8 @@ export function TrackMap({ ship }: Props) {
           center={center}
           radius={view === 'drift' ? 11 : 9}
           pathOptions={{
-            color: '#F0C27A',
-            fillColor: '#F0C27A',
+            color: '#ff5a1f',
+            fillColor: '#ff5a1f',
             fillOpacity: 0.95,
             weight: 2,
           }}
@@ -290,7 +290,7 @@ export function TrackMap({ ship }: Props) {
           center={center}
           radius={view === 'drift' ? 22 : 18}
           pathOptions={{
-            color: '#F0C27A',
+            color: '#ff5a1f',
             fillOpacity: 0,
             weight: 1,
             opacity: 0.45,
@@ -314,8 +314,9 @@ export function TrackMap({ ship }: Props) {
             <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
               Space Notices
             </a>{' '}
-            (liftoff → splashdown → ocean drift). Copper = ascent/coast, lighter
-            = reentry, gold = post-landing. Shaded = AHA / nav-warning areas.
+            (liftoff → splashdown → ocean drift). Ignition orange = ascent /
+            reentry, amber = post-landing drift. Shaded = AHA / nav-warning
+            areas.
           </>
         )}{' '}
         Scroll or +/− to zoom.
