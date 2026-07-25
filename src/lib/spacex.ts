@@ -202,6 +202,10 @@ export function formatDriftDistance(km: number): string {
   return `${km.toFixed(1)} km`
 }
 
+function pluralUnit(value: number, singular: string, plural: string): string {
+  return `${value} ${value === 1 ? singular : plural}`
+}
+
 /** Elapsed ocean-drift duration since splashdown. */
 export function formatDriftDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '—'
@@ -211,13 +215,15 @@ export function formatDriftDuration(seconds: number): string {
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
   if (days > 0) {
-    return `${days}D ${h}H ${String(m).padStart(2, '0')}M`
+    return `${pluralUnit(days, 'day', 'days')} ${pluralUnit(h, 'hour', 'hours')}`
   }
   if (h > 0) {
-    return `${h}H ${String(m).padStart(2, '0')}M ${String(s).padStart(2, '0')}S`
+    return `${pluralUnit(h, 'hour', 'hours')} ${pluralUnit(m, 'minute', 'minutes')}`
   }
-  if (m > 0) return `${m}M ${String(s).padStart(2, '0')}S`
-  return `${s}S`
+  if (m > 0) {
+    return `${pluralUnit(m, 'minute', 'minutes')} ${pluralUnit(s, 'second', 'seconds')}`
+  }
+  return pluralUnit(s, 'second', 'seconds')
 }
 
 export function isNearSurface(altitudeM: number): boolean {

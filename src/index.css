@@ -135,11 +135,15 @@ select {
   background: rgba(255, 196, 0, 0.08);
   color: var(--amber);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   border-radius: var(--radius);
+  text-align: right;
+  max-width: min(100%, 18rem);
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .live-badge[data-state="error"] {

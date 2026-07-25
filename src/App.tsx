@@ -18,13 +18,19 @@ import {
 } from './lib/spacex'
 
 function formatUpdateAge(seconds: number): string {
-  if (seconds < 60) return `${seconds}S AGO`
+  if (seconds < 60) {
+    return `${seconds} ${seconds === 1 ? 'SECOND' : 'SECONDS'} AGO`
+  }
   const mins = Math.floor(seconds / 60)
-  if (mins < 60) return `${mins}M AGO`
+  if (mins < 60) {
+    return `${mins} ${mins === 1 ? 'MINUTE' : 'MINUTES'} AGO`
+  }
   const hrs = Math.floor(mins / 60)
-  if (hrs < 48) return `${hrs}H AGO`
+  if (hrs < 48) {
+    return `${hrs} ${hrs === 1 ? 'HOUR' : 'HOURS'} AGO`
+  }
   const days = Math.floor(hrs / 24)
-  return `${days}D AGO`
+  return `${days} ${days === 1 ? 'DAY' : 'DAYS'} AGO`
 }
 
 function App() {
