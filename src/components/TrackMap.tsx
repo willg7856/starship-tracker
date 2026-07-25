@@ -16,10 +16,7 @@ import {
   LANDING_FIX,
   LAUNCH_PAD,
   buildFlightPath,
-  getAscentHazard,
-  getBoosterTrack,
-  getFaaReentryCorridor,
-  getIndianOceanHazard,
+  getNoticePolygons,
 } from '../data/flight13Path'
 import { formatLatLon, isNearSurface } from '../lib/spacex'
 import type { ShipTrack } from '../lib/spacex'
@@ -62,8 +59,7 @@ function FitBounds({
     if (mode === 'drift' && driftBounds.length >= 1) {
       const bounds = L.latLngBounds(driftBounds.map(([lat, lon]) => [lat, lon]))
       bounds.extend(current)
-      // Keep a readable close-up even when drift is still small.
-      map.fitBounds(bounds.pad(0.85), { animate: false, maxZoom: 11 })
+      map.fitBounds(bounds.pad(0.55), { animate: false, maxZoom: 10 })
       return
     }
     if (fullPath.length >= 2) {
@@ -83,18 +79,16 @@ export function TrackMap({ ship }: Props) {
   const [mode, setMode] = useState<ViewMode>(landed ? 'drift' : 'flight')
 
   const { coast, landing, full } = useMemo(() => buildFlightPath(), [])
-  const booster = useMemo(() => getBoosterTrack(), [])
-  const ioHazard = useMemo(() => getIndianOceanHazard(), [])
-  const reentry = useMemo(() => getFaaReentryCorridor(), [])
-  const ascent = useMemo(() => getAscentHazard(), [])
+  const notices = useMemo(() => getNoticePolygons(), [])
 
-  const driftBounds = useMemo(() => {
-    const pts: Array<[number, number]> = [
-      [LANDING_FIX.lat, LANDING_FIX.lon],
-      [current.latitude, current.longitude],
-    ]
-    return pts
-  }, [current.latitude, current.longitude])
+  const driftBounds = useMemo(
+    () =>
+      [
+        [LANDING_FIX.lat, LANDING_FIX.lon],
+        [current.latitude, current.longitude],
+      ] as Array<[number, number]>,
+    [current.latitude, current.longitude],
+  )
 
   const driftLine = useMemo(() => {
     if (!landed) return null
@@ -104,7 +98,6 @@ export function TrackMap({ ship }: Props) {
     return [a, b] as Array<[number, number]>
   }, [landed, current.latitude, current.longitude])
 
-  // If the ship is still flying, force full-flight view.
   const view = landed ? mode : 'flight'
   const showFlightLayers = view === 'flight'
 
@@ -131,7 +124,7 @@ export function TrackMap({ ship }: Props) {
 
       <MapContainer
         center={center}
-        zoom={landed ? 10 : 3}
+        zoom={landed ? 9 : 3}
         className="track-map"
         scrollWheelZoom
         zoomControl
@@ -149,60 +142,38 @@ export function TrackMap({ ship }: Props) {
           current={center}
         />
 
-        {showFlightLayers && ascent.length >= 3 && (
-          <Polygon
-            positions={ascent}
-            pathOptions={{
-              color: '#6E8B9A',
-              weight: 1,
-              opacity: 0.25,
-              fillColor: '#6E8B9A',
-              fillOpacity: 0.04,
-            }}
-          />
-        )}
-
-        {showFlightLayers && reentry.length >= 3 && (
-          <Polygon
-            positions={reentry}
-            pathOptions={{
-              color: '#C9853A',
-              weight: 1,
-              opacity: 0.4,
-              fillColor: '#C9853A',
-              fillOpacity: 0.07,
-            }}
-          >
-            <Popup>FAA Stage 2 reentry hazard corridor (approx.)</Popup>
-          </Polygon>
-        )}
-
-        {showFlightLayers && ioHazard.length >= 3 && (
-          <Polygon
-            positions={ioHazard}
-            pathOptions={{
-              color: '#C9853A',
-              weight: 1,
-              opacity: 0.3,
-              fillColor: '#C9853A',
-              fillOpacity: 0.05,
-            }}
-          >
-            <Popup>Indian Ocean splashdown hazard zone</Popup>
-          </Polygon>
-        )}
-
-        {showFlightLayers && booster.length >= 2 && (
-          <Polyline
-            positions={booster}
-            pathOptions={{
-              color: '#6E8B9A',
-              weight: 2,
-              opacity: 0.55,
-              dashArray: '2 6',
-            }}
-          />
-        )}
+        {showFlightLayers &&
+          notices.map((group) =>
+            group.polygons.map((poly, idx) => (
+              <Polygon
+                key={`${group.id}-${idx}`}
+                positions={poly}
+                pathOptions={{
+                  color:
+                    group.type === 'ADP_LINK_FILE'
+                      ? '#C9853A'
+                      : group.type === 'NAVWARNING'
+                        ? '#6E8B9A'
+                        : '#B4553A',
+                  weight: 1,
+                  opacity: 0.45,
+                  fillColor:
+                    group.type === 'ADP_LINK_FILE'
+                      ? '#C9853A'
+                      : group.type === 'NAVWARNING'
+                        ? '#6E8B9A'
+                        : '#B4553A',
+                  fillOpacity: 0.06,
+                }}
+              >
+                <Popup>
+                  {group.name}
+                  <br />
+                  {group.id}
+                </Popup>
+              </Polygon>
+            )),
+          )}
 
         {showFlightLayers && coast.length >= 2 && (
           <Polyline
@@ -219,10 +190,9 @@ export function TrackMap({ ship }: Props) {
           <Polyline
             positions={landing}
             pathOptions={{
-              color: '#C9853A',
+              color: '#F0C27A',
               weight: 3,
-              opacity: 0.9,
-              dashArray: '7 9',
+              opacity: 0.95,
             }}
           />
         )}
@@ -254,11 +224,11 @@ export function TrackMap({ ship }: Props) {
             icon={landingIcon}
           >
             <Popup>
-              <strong>First tracked fix</strong>
+              <strong>Splashdown</strong>
               <br />
               {formatLatLon(LANDING_FIX.lat, LANDING_FIX.lon)}
               <br />
-              Baseline used for drift
+              First near-surface SpaceX fix
             </Popup>
           </Marker>
         )}
@@ -294,17 +264,23 @@ export function TrackMap({ ship }: Props) {
       <p className="map-caption">
         {view === 'drift' ? (
           <>
-            Close-up: open ring = first tracked splashdown fix; filled = live
-            SpaceX position. Gold line = drift between them.
+            Close-up: open ring = splashdown fix from Space Notices archive;
+            filled = live SpaceX position. Gold line = ocean drift (~
+            {Math.round(
+              L.latLng(LANDING_FIX.lat, LANDING_FIX.lon).distanceTo(
+                L.latLng(current.latitude, current.longitude),
+              ) / 1000,
+            )}{' '}
+            km).
           </>
         ) : (
           <>
-            Copper solid: Flight Club Ship coast. Dashed: FAA Stage 2 reentry
-            corridor (
+            Track from{' '}
             <a href={FLIGHT_PATH_SOURCE.url} target="_blank" rel="noreferrer">
-              FC sim
-            </a>
-            ). SpaceX does not publish a full archived ground track.
+              Space Notices
+            </a>{' '}
+            archived SpaceX vehicle-tracker fixes (liftoff → splashdown). Shaded
+            polygons: published AHA / nav-warning areas.
           </>
         )}{' '}
         Scroll or +/− to zoom.

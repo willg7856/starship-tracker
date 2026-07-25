@@ -38,13 +38,9 @@ npm run preview
 
 ## Flight path
 
-SpaceX’s public tracker only publishes the live fix plus a short forward prediction — it does not archive the flown ground track. The map path is assembled from:
+SpaceX’s live tracker only keeps the current fix plus a short forward prediction. The full Flight 13 ground track on the map comes from the archived SpaceX vehicle-tracker series published by [Space Notices](https://space-notices.com/entry/launch-starship-flight-13) (liftoff → splashdown), along with the associated AHA / nav-warning polygons.
 
-1. **Flight Club** public Flight 13 Ship (stage 2) simulation for ascent/coast
-2. The **FAA Stage 2 reentry hazard corridor** (CADENA / FAA ATO briefing) for the Indian Ocean approach, ending at the first public SpaceX splashdown fix
-3. **Drift since landing** compares the live fix to that frozen splashdown position
-
-This is a public reconstruction, not official post-flight telemetry.
+**Ocean drift** is the great-circle distance from that archived splashdown fix to the live SpaceX position.
 
 ## Notes
 

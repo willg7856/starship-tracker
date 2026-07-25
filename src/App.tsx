@@ -46,7 +46,7 @@ function App() {
       label: formatDriftDistance(km),
       direction:
         km < 0.05
-          ? 'still on first tracked fix'
+          ? 'still on splashdown fix'
           : `moved ${formatBearingCardinal(bearing)}`,
       baseline: formatLatLon(LANDING_FIX.lat, LANDING_FIX.lon),
     }
@@ -149,9 +149,16 @@ function App() {
 
           {drift && (
             <p className="drift-note">
-              Drift is live SpaceX position minus the first public splashdown fix
-              we recorded ({drift.baseline}) — not an official SpaceX drift
-              product, and not measured from the exact touchdown second.
+              Drift is live SpaceX position minus the splashdown fix archived by{' '}
+              <a
+                href="https://space-notices.com/entry/launch-starship-flight-13"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Space Notices
+              </a>{' '}
+              ({drift.baseline}) — the first near-surface tracker sample after
+              reentry.
             </p>
           )}
 

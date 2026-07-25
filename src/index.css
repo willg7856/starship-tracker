@@ -524,6 +524,11 @@ a {
   max-width: 46rem;
 }
 
+.drift-note a {
+  color: var(--flare);
+  text-underline-offset: 2px;
+}
+
 .source-line {
   margin: 1.25rem 0 0;
   font-size: 0.68rem;
