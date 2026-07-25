@@ -1,4 +1,5 @@
 import track from './flight13-ship-track.json'
+import { haversineKm } from '../lib/spacex'
 
 export type LatLon = {
   lat: number
@@ -19,6 +20,12 @@ export type NoticePolygonGroup = {
   type: string
   polygons: Array<Array<[number, number]>>
 }
+
+/**
+ * Break ocean-drift polylines when consecutive samples jump farther than this.
+ * Keeps real dense Space Notices drift, drops long straight gap connectors.
+ */
+const MAX_DRIFT_GAP_KM = 1
 
 /** Orbital Launch Pad 2 */
 export const LAUNCH_PAD: LatLon = {
@@ -66,25 +73,54 @@ export function getFlightTrack(): TrackPoint[] {
   return track.points as TrackPoint[]
 }
 
+function toLatLon(p: TrackPoint): [number, number] {
+  return [p.lat, p.lon]
+}
+
+/** Split a path when consecutive points jump farther than maxGapKm. */
+export function splitPathByDistanceGap(
+  points: Array<[number, number]>,
+  maxGapKm = MAX_DRIFT_GAP_KM,
+): Array<Array<[number, number]>> {
+  const segments: Array<Array<[number, number]>> = []
+  let current: Array<[number, number]> = []
+
+  for (const point of points) {
+    const prev = current[current.length - 1]
+    if (
+      prev &&
+      haversineKm(prev[0], prev[1], point[0], point[1]) > maxGapKm
+    ) {
+      if (current.length >= 2) segments.push(current)
+      current = []
+    }
+    current.push(point)
+  }
+
+  if (current.length >= 2) segments.push(current)
+  return segments
+}
+
 /**
- * Path segments from Space Notices archive + later SpaceX samples.
- * Ocean drift is drawn continuously, including any straight gap.
+ * Path segments from the Space Notices Trajectory layer.
+ * Ocean drift is split so long straight telemetry gaps are not drawn.
  */
 export function buildFlightPath(): {
   ascent: Array<[number, number]>
   reentry: Array<[number, number]>
   oceanDrift: Array<[number, number]>
+  oceanDriftSegments: Array<Array<[number, number]>>
   full: Array<[number, number]>
 } {
   const points = getFlightTrack()
-  const toLatLon = (p: TrackPoint) => [p.lat, p.lon] as [number, number]
 
   const ascent = points.slice(0, entryIndex + 1).map(toLatLon)
   const reentry = points.slice(entryIndex, splashIndex + 1).map(toLatLon)
   const oceanDrift = points.slice(splashIndex).map(toLatLon)
+  const oceanDriftSegments = splitPathByDistanceGap(oceanDrift)
   const full = points.map(toLatLon)
 
-  return { ascent, reentry, oceanDrift, full }
+  return { ascent, reentry, oceanDrift, oceanDriftSegments, full }
 }
 
 export function getNoticePolygons(): NoticePolygonGroup[] {

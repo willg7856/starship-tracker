@@ -77,7 +77,12 @@ def main() -> int:
         key = (round(p["lat"], 6), round(p["lon"], 6))
         if buckets[key]:
             src = buckets[key].popleft()
-            t = float(src["t"])
+            src_t = float(src["t"])
+            # Keep mission time monotonic and avoid inheriting old archive holes.
+            if not points or 0 <= src_t - last_t <= 120:
+                t = src_t if not points else max(src_t, last_t)
+            else:
+                t = last_t + 10.0
             alt = float(src["alt_m"])
         else:
             t = last_t + 10.0

@@ -7,8 +7,8 @@ export type LiveTrailPoint = {
   longitude: number
 }
 
-/** Bumped to drop old jittery trails saved in browsers. */
-const STORAGE_KEY = 'bsz-ship40-live-trail-v2'
+/** Bumped to drop old trails that bridged the straight archive gap. */
+const STORAGE_KEY = 'bsz-ship40-live-trail-v3'
 const MAX_POINTS = 20_000
 /** Ignore GPS noise — only keep fixes that moved at least this far. */
 const MIN_MOVE_M = 40
