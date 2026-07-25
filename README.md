@@ -2,6 +2,8 @@
 
 Live location tracker for SpaceX **Ship 40** (Starship Flight 13), reading the same public telemetry feed that powers [spacex.com’s vehicle tracker](https://www.spacex.com/vehicle-tracker).
 
+**Live:** [starship.beyondstagezero.com](https://starship.beyondstagezero.com)
+
 ## Data source
 
 Directly from SpaceX CDN (no scraping):
