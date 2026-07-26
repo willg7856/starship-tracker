@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TrackMap } from './components/TrackMap'
 import { useShip40 } from './hooks/useShip40'
-import { LANDING_FIX, SPLASHDOWN_MISSION_TIME } from './data/flight13Path'
+import {
+  LANDING_FIX,
+  SPLASHDOWN_GPS_TIME,
+  SPLASHDOWN_MISSION_TIME,
+} from './data/flight13Path'
 import {
   SPACEX_VEHICLE_TRACKER,
   bearingDegrees,
@@ -13,22 +17,23 @@ import {
   formatLatLon,
   formatMissionClock,
   formatSpeedKmh,
+  gpsTimeToDate,
   haversineKm,
   isNearSurface,
 } from './lib/spacex'
 
 function formatUpdateAge(seconds: number): string {
-  if (seconds < 60) return `${seconds}S AGO`
+  if (seconds < 60) return `${seconds}s ago`
   const totalMins = Math.floor(seconds / 60)
-  if (totalMins < 60) return `${totalMins}M AGO`
+  if (totalMins < 60) return `${totalMins}m ago`
   const hrs = Math.floor(totalMins / 60)
   const mins = totalMins % 60
   if (hrs < 48) {
-    return mins === 0 ? `${hrs}H AGO` : `${hrs}H ${mins}M AGO`
+    return mins === 0 ? `${hrs}h ago` : `${hrs}h ${mins}m ago`
   }
   const days = Math.floor(hrs / 24)
   const remHrs = hrs % 24
-  return remHrs === 0 ? `${days}D AGO` : `${days}D ${remHrs}H AGO`
+  return remHrs === 0 ? `${days}d ago` : `${days}d ${remHrs}h ago`
 }
 
 function App() {
@@ -51,13 +56,19 @@ function App() {
 
   const current = ship?.current
 
-  // Tick mission clock every second between SpaceX polls.
+  // SpaceX: tick from last poll. Fallback: wall clock since splashdown.
   const liveMissionTime = useMemo(() => {
     if (!current) return null
+    if (positionSource === 'space-notices') {
+      const splashMs = gpsTimeToDate(SPLASHDOWN_GPS_TIME).getTime()
+      return (
+        SPLASHDOWN_MISSION_TIME + Math.max(0, (nowMs - splashMs) / 1000)
+      )
+    }
     if (!fetchedAt) return current.mission_time
     const elapsedS = Math.max(0, (nowMs - fetchedAt.getTime()) / 1000)
     return current.mission_time + elapsedS
-  }, [current, fetchedAt, nowMs])
+  }, [current, fetchedAt, nowMs, positionSource])
 
   const place = useMemo(() => {
     if (!current) return null
@@ -94,53 +105,41 @@ function App() {
     }
   }, [current, liveMissionTime])
 
-  // Shared across devices: age since Ship 40 last changed position
-  // (from Space Notices / baked path — not browser local state).
   const liveLabel = error
-    ? 'OFFLINE'
+    ? 'Offline'
     : loading || !lastMovedAt
-      ? 'LINKING'
-      : `LAST UPDATED ${formatUpdateAge(
+      ? 'Linking…'
+      : `Updated ${formatUpdateAge(
           Math.max(0, Math.floor((nowMs - lastMovedAt.getTime()) / 1000)),
-        )}${
-          positionSource === 'space-notices' ? ' · SPACE NOTICES' : ''
-        }`
+        )}`
 
   return (
     <div className="app">
-      <header className="nav">
-        <div className="nav-inner">
-          <a className="brand-logo" href="https://www.beyondstagezero.com/">
-            <span className="brand-logo-mark" aria-hidden="true" />
-            <span className="brand-logo-text">
-              <span className="brand-logo-bracket">[</span>
-              BSZ
-              <span className="brand-logo-bracket">]</span>
-              <span className="brand-logo-sep">/</span>
-              SHIP 40
-            </span>
-          </a>
-          <div
-            className="live-badge"
-            data-state={error ? 'error' : loading ? 'loading' : 'live'}
-          >
-            <span className="live-dot" />
-            {liveLabel}
+      <header className="masthead">
+        <div className="masthead-inner">
+          <div className="masthead-brand-block">
+            <a className="brand" href="https://www.beyondstagezero.com/">
+              <span className="brand-mark" aria-hidden="true" />
+              <span className="brand-name">Beyond Stage Zero</span>
+            </a>
+            <h1 className="masthead-title">
+              Ship 40
+              <span className="masthead-title-meta">· Flight 13</span>
+            </h1>
+            <p className="masthead-sub">
+              Live location from SpaceX&apos;s public vehicle tracker.
+            </p>
           </div>
-        </div>
-      </header>
 
-      <section className="hero">
-        <div className="hero-grid-bg" aria-hidden="true" />
-        <div className="hero-inner">
-          <p className="hero-eyebrow">Flight 13 · Starship</p>
-          <h1 className="hero-h1">Ship 40</h1>
-          <p className="hero-sub">
-            Live location from SpaceX&apos;s public vehicle tracker.
-          </p>
-          <div className="hero-actions">
+          <div className="masthead-meta">
+            <p
+              className="status-line"
+              data-state={error ? 'error' : loading ? 'loading' : 'live'}
+            >
+              {liveLabel}
+            </p>
             <a
-              className="btn btn-outline"
+              className="masthead-link"
               href={SPACEX_VEHICLE_TRACKER}
               target="_blank"
               rel="noreferrer"
@@ -149,22 +148,20 @@ function App() {
             </a>
           </div>
         </div>
-      </section>
+      </header>
 
       <section className="map-section" aria-label="Ship 40 map">
-        <div className="map-frame">
-          {current && ship ? (
-            <TrackMap
-              ship={ship}
-              liveTrail={liveTrail}
-              spaceNoticesExtension={spaceNoticesExtension}
-            />
-          ) : (
-            <div className="map-skeleton">
-              {error ? <p>{error}</p> : <p>Acquiring telemetry…</p>}
-            </div>
-          )}
-        </div>
+        {current && ship ? (
+          <TrackMap
+            ship={ship}
+            liveTrail={liveTrail}
+            spaceNoticesExtension={spaceNoticesExtension}
+          />
+        ) : (
+          <div className="map-skeleton">
+            {error ? <p>{error}</p> : <p>Acquiring telemetry…</p>}
+          </div>
+        )}
       </section>
 
       {current && (
@@ -172,10 +169,9 @@ function App() {
           <div className="section-inner">
             <div className="telemetry-head">
               <div>
-                <p className="section-eyebrow">Position</p>
                 <h2>Last known fix</h2>
+                {place && <p className="telemetry-place">{place}</p>}
               </div>
-              {place && <p className="telemetry-place">{place}</p>}
             </div>
 
             <dl className={`telemetry-grid${drift ? ' with-drift' : ''}`}>
@@ -224,13 +220,9 @@ function App() {
 
       <footer className="footer">
         <div className="footer-inner">
-          <a className="brand-logo" href="https://www.beyondstagezero.com/">
-            <span className="brand-logo-mark" aria-hidden="true" />
-            <span className="brand-logo-text">
-              <span className="brand-logo-bracket">[</span>
-              BEYOND STAGE ZERO
-              <span className="brand-logo-bracket">]</span>
-            </span>
+          <a className="brand" href="https://www.beyondstagezero.com/">
+            <span className="brand-mark" aria-hidden="true" />
+            <span className="brand-name">Beyond Stage Zero</span>
           </a>
           <p>Unofficial tracker · SpaceX public telemetry</p>
         </div>

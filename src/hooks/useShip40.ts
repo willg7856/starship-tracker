@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ARCHIVE_END_GPS_TIME,
   SPACE_NOTICES_BAKED_LATEST_ID,
   SPLASHDOWN_GPS_TIME,
   SPLASHDOWN_MISSION_TIME,
@@ -36,11 +35,11 @@ export type TrackerState = {
   error: string | null
   loading: boolean
   refreshing: boolean
-  /** Where the current fix came from when SpaceX feed is empty. */
+  /** Internal: SpaceX live fix vs archived/fallback tip. Not shown in UI. */
   positionSource: PositionSource | null
   /** Accumulated near-surface SpaceX fixes since this browser started tracking. */
   liveTrail: LiveTrailPoint[]
-  /** Newer Space Notices trajectory samples beyond the baked path tip. */
+  /** Newer trajectory samples beyond the baked path tip. */
   spaceNoticesExtension: SpaceNoticesPoint[]
   /**
    * When Ship 40 last actually changed position, derived from the shared
@@ -49,22 +48,16 @@ export type TrackerState = {
   lastMovedAt: Date | null
 }
 
-function tipGpsAndMission(extension: SpaceNoticesPoint[]): {
+/** Mission/GPS time from real wall-clock elapsed since splashdown. */
+function missionClockNow(nowMs = Date.now()): {
   gpsTime: number
   missionTime: number
 } {
-  const track = getFlightTrack()
-  const lastTrackT = track.length > 0 ? track[track.length - 1].t : 0
-  // ~10s per Space Notices sample beyond the baked tip (matches lastMove).
-  const missionTime = lastTrackT + extension.length * 10
-  const gpsTime =
-    SPLASHDOWN_GPS_TIME + (missionTime - SPLASHDOWN_MISSION_TIME)
-  if (Number.isFinite(gpsTime) && gpsTime > 0) {
-    return { gpsTime, missionTime }
-  }
+  const splashMs = gpsTimeToDate(SPLASHDOWN_GPS_TIME).getTime()
+  const elapsed = Math.max(0, (nowMs - splashMs) / 1000)
   return {
-    gpsTime: ARCHIVE_END_GPS_TIME || SPLASHDOWN_GPS_TIME,
-    missionTime: SPLASHDOWN_MISSION_TIME,
+    missionTime: SPLASHDOWN_MISSION_TIME + elapsed,
+    gpsTime: SPLASHDOWN_GPS_TIME + elapsed,
   }
 }
 
@@ -105,9 +98,7 @@ export function useShip40(): TrackerState {
       const tip = extension[extension.length - 1] ?? points[points.length - 1]
       if (!tip) return false
 
-      const { gpsTime, missionTime } = tipGpsAndMission(
-        extension.length > 0 ? extension : [tip],
-      )
+      const { gpsTime, missionTime } = missionClockNow()
       const nextShip = shipTrackFromSpaceNoticesTip(tip, {
         gpsTime,
         missionTime,
@@ -196,9 +187,7 @@ export function useShip40(): TrackerState {
           const tip =
             extension[extension.length - 1] ?? points[points.length - 1]
           if (!tip) return
-          const { gpsTime, missionTime } = tipGpsAndMission(
-            extension.length > 0 ? extension : [tip],
-          )
+          const { gpsTime, missionTime } = missionClockNow()
           setShip(
             shipTrackFromSpaceNoticesTip(tip, {
               gpsTime,
