@@ -1,3 +1,5 @@
+type Env = { ASSETS: Fetcher }
+
 type ProxyOptions = {
   upstream: string
   cacheControl: string
@@ -16,14 +18,12 @@ async function proxyUpstream({
     const upstreamRes = await fetch(url, {
       headers: { Accept: 'application/json' },
     })
-
     if (!upstreamRes.ok) {
       return Response.json(
         { error: `${errorLabel} returned ${upstreamRes.status}` },
         { status: upstreamRes.status },
       )
     }
-
     const body = await upstreamRes.text()
     return new Response(body, {
       status: 200,
@@ -39,7 +39,7 @@ async function proxyUpstream({
 }
 
 export default {
-  async fetch(request): Promise<Response> {
+  async fetch(request, env): Promise<Response> {
     const { pathname } = new URL(request.url)
 
     if (pathname === '/api/tracker') {
@@ -49,15 +49,6 @@ export default {
         cacheControl: 'public, max-age=10, s-maxage=10',
         bustCache: true,
         errorLabel: 'SpaceX tracker',
-      })
-    }
-
-    if (pathname === '/api/mission') {
-      return proxyUpstream({
-        upstream:
-          'https://content.spacex.com/api/spacex-website/missions/starship-flight-13',
-        cacheControl: 'public, max-age=300, s-maxage=300',
-        errorLabel: 'SpaceX mission API',
       })
     }
 
@@ -73,6 +64,6 @@ export default {
       return Response.json({ error: 'Not found' }, { status: 404 })
     }
 
-    return new Response(null, { status: 404 })
+    return env.ASSETS.fetch(request)
   },
-} satisfies ExportedHandler
+} satisfies ExportedHandler<Env>

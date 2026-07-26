@@ -1,6 +1,5 @@
 /**
- * Cloudflare Workers config for the Ship 40 tracker.
- * https://developers.cloudflare.com/workers/wrangler/configuration/
+ * Ship 40 tracker — vanilla JS assets + API proxy Worker.
  */
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
@@ -8,12 +7,13 @@
   "account_id": "e7c94b9e0e9c735313456b00fea7168f",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-07-26",
-  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
   "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": true
   },
   "routes": [
     { "pattern": "starship.beyondstagezero.com", "custom_domain": true },

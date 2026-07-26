@@ -1,32 +1,14 @@
 {
   "name": "ship-40-tracker",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "wrangler types && tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types"
   },
-  "dependencies": {
-    "leaflet": "^1.9.4",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-leaflet": "^5.0.0"
-  },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.13.0",
-    "@types/leaflet": "^1.9.21",
-    "@types/node": "^24.13.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
-    "oxlint": "^1.71.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.1",
     "wrangler": "^4.114.0"
   }
 }
