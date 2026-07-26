@@ -4,11 +4,15 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "deploy:cf": "wrangler deploy"
   },
   "devDependencies": {
+    "@vercel/node": "^5.3.6",
+    "@types/node": "^22.15.3",
+    "typescript": "~5.8.3",
+    "vercel": "^44.0.0",
     "wrangler": "^4.114.0"
   }
 }

@@ -1,18 +1,21 @@
 # Ship 40 Tracker
 
-Lean vanilla JS tracker for SpaceX Starship Flight 13 / Ship 40.
+Vanilla JS tracker for SpaceX Starship Flight 13 / Ship 40.
 
 ## Stack
 
-- Static ES modules + Leaflet (CDN)
-- Cloudflare Worker proxy for SpaceX + Space Notices APIs
+- Static ES modules + Leaflet (CDN) in `public/`
+- Vercel serverless API routes in `api/` (SpaceX + Space Notices proxies)
 
-## Develop / deploy
+## Deploy (Vercel)
 
 ```bash
 npm install
-npm run dev      # wrangler dev
-npm run deploy
+npx vercel --prod
 ```
 
-Live: `starship.beyondstagezero.com`
+Attach domain `starship.beyondstagezero.com` (and optionally `ship40.beyondstagezero.com`) in the Vercel project.
+
+## Optional Cloudflare Worker
+
+`npm run deploy:cf` still deploys to `*.workers.dev` only.
