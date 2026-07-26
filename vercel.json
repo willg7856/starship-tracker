@@ -3,6 +3,9 @@
   "buildCommand": null,
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/|_vercel/).*)",
+      "destination": "/index.html"
+    }
   ]
 }
