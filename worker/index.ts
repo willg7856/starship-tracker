@@ -51,15 +51,17 @@ async function proxyVercelInsights(request: Request): Promise<Response> {
   headers.delete('host')
   headers.set('host', upstream.host)
 
-  const upstreamRes = await fetch(upstream, {
+  const init: RequestInit = {
     method: request.method,
     headers,
-    body:
-      request.method === 'GET' || request.method === 'HEAD'
-        ? undefined
-        : request.body,
     redirect: 'manual',
-  })
+  }
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    init.body = request.body
+    // @ts-expect-error duplex is required for streaming request bodies in Workers
+    init.duplex = 'half'
+  }
+  const upstreamRes = await fetch(upstream, init)
 
   const responseHeaders = new Headers(upstreamRes.headers)
   responseHeaders.delete('content-encoding')
