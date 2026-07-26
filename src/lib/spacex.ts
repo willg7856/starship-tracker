@@ -62,7 +62,11 @@ export type MissionSummary = {
 
 export async function fetchShip40Tracker(
   signal?: AbortSignal,
-): Promise<{ ship: ShipTrack; fetchedAt: Date; raw: StarshipTrackerPayload }> {
+): Promise<{
+  ship: ShipTrack
+  fetchedAt: Date
+  raw: StarshipTrackerPayload
+} | null> {
   const url = `${STARSHIP_TRACKER_URL}?t=${Date.now()}`
   const res = await fetch(url, {
     signal,
@@ -73,10 +77,27 @@ export async function fetchShip40Tracker(
   }
   const raw = (await res.json()) as StarshipTrackerPayload
   const ship = raw.ship40
-  if (!ship?.current) {
-    throw new Error('ship40 not present in SpaceX tracker feed')
-  }
+  // SpaceX sometimes clears the public feed post-flight (`{}`).
+  if (!ship?.current) return null
   return { ship, fetchedAt: new Date(), raw }
+}
+
+/** Build a near-surface ShipTrack from the latest Space Notices fix. */
+export function shipTrackFromSpaceNoticesTip(
+  tip: { latitude: number; longitude: number },
+  opts: { gpsTime: number; missionTime: number },
+): ShipTrack {
+  return {
+    current: {
+      gps_time: opts.gpsTime,
+      mission_time: opts.missionTime,
+      altitude: -20,
+      speed: 0,
+      latitude: tip.latitude,
+      longitude: tip.longitude,
+    },
+    trajectory: [],
+  }
 }
 
 export async function fetchMissionSummary(

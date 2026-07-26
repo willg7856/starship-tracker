@@ -40,6 +40,7 @@ function App() {
     liveTrail,
     spaceNoticesExtension,
     lastMovedAt,
+    positionSource,
   } = useShip40()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -101,7 +102,9 @@ function App() {
       ? 'Linking…'
       : `Updated ${formatUpdateAge(
           Math.max(0, Math.floor((nowMs - lastMovedAt.getTime()) / 1000)),
-        )}`
+        )}${
+          positionSource === 'space-notices' ? ' · via Space Notices' : ''
+        }`
 
   return (
     <div className="app">
