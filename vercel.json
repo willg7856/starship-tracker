@@ -2,9 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": null,
   "outputDirectory": "public",
+  "git": {
+    "deploymentEnabled": true
+  },
   "rewrites": [
     {
-      "source": "/((?!api/|_vercel/).*)",
+      "source": "/((?!api/|_vercel/|js/|css/|data/|favicon).*)",
       "destination": "/index.html"
     }
   ]
