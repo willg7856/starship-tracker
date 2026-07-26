@@ -43,6 +43,8 @@ This builds the Vite SPA and deploys it as a Worker with static assets (`ship-40
 2. Attach `starship.beyondstagezero.com` (zone must be on Cloudflare DNS)
 3. Optionally enable [Web Analytics](https://developers.cloudflare.com/web-analytics/) for the zone
 
+Vercel auto-deploys are disabled in `vercel.json` (`git.deploymentEnabled: false`). After Cloudflare is live on the custom domain, disconnect or delete the old Vercel project so it cannot republish.
+
 ## Flight path
 
 SpaceX’s live tracker only keeps the current fix plus a short forward prediction. The flown Flight 13 ground track comes from the [Space Notices](https://space-notices.com/entry/launch-starship-flight-13) Trajectory layer (seed path + live [`ship-40`](https://data.space-notices.com/space-notices-data/ship-40) feed via `/api/space-notices-ship40`). After the baked tip, the map also extends from that feed and from SpaceX near-surface fixes in the browser.
