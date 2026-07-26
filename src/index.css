@@ -220,8 +220,7 @@ select {
   gap: 0.85rem 1.1rem;
 }
 
-.masthead-link,
-.theme-toggle {
+.masthead-link {
   font-family: var(--font-mono);
   font-size: 0.74rem;
   font-weight: 500;
@@ -230,20 +229,42 @@ select {
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.masthead-link:hover,
-.theme-toggle:hover {
+.masthead-link:hover {
   color: var(--ignition);
   border-bottom-color: color-mix(in srgb, var(--ignition) 55%, transparent);
 }
 
 .theme-toggle {
   appearance: none;
-  background: transparent;
-  border-top: 0;
-  border-left: 0;
-  border-right: 0;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--ink-soft);
+  background: var(--paper);
+  color: var(--ignition);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--ignition);
+  outline-offset: 2px;
+}
+
+.theme-toggle[aria-pressed='true'] {
+  border-color: var(--ink-soft);
 }
 
 @keyframes masthead-in {
