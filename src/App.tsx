@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TrackMap } from './components/TrackMap'
 import { useShip40 } from './hooks/useShip40'
+import { useTheme } from './hooks/useTheme'
 import {
   LANDING_FIX,
   SPLASHDOWN_GPS_TIME,
@@ -47,6 +48,7 @@ function App() {
     lastMovedAt,
     positionSource,
   } = useShip40()
+  const { theme, toggleTheme } = useTheme()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -138,14 +140,27 @@ function App() {
             >
               {liveLabel}
             </p>
-            <a
-              className="masthead-link"
-              href={SPACEX_VEHICLE_TRACKER}
-              target="_blank"
-              rel="noreferrer"
-            >
-              SpaceX tracker
-            </a>
+            <div className="masthead-actions">
+              <button
+                type="button"
+                className="theme-toggle"
+                onClick={toggleTheme}
+                aria-pressed={theme === 'dark'}
+                aria-label={
+                  theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+                }
+              >
+                {theme === 'dark' ? 'Light' : 'Dark'}
+              </button>
+              <a
+                className="masthead-link"
+                href={SPACEX_VEHICLE_TRACKER}
+                target="_blank"
+                rel="noreferrer"
+              >
+                SpaceX tracker
+              </a>
+            </div>
           </div>
         </div>
       </header>

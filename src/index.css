@@ -10,6 +10,13 @@
   --signal: #0f7a5a;
   --warn: #b45309;
   --danger: #b42318;
+  --map-wash: #dfe6ea;
+  --map-wash-deep: #d5dde3;
+  --body-glow: rgba(226, 74, 18, 0.06);
+  --body-top: #f7f8f6;
+  --body-bottom: #eceeea;
+  --masthead-bg: rgba(243, 244, 242, 0.94);
+  --toggle-bg: rgba(255, 253, 249, 0.92);
   --font-display: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -22,6 +29,29 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  --ink: #f2f1ec;
+  --ink-soft: #d6d3cb;
+  --paper: #12141a;
+  --paper-raised: #1a1d24;
+  --line: #2c313a;
+  --muted: #9aa1ab;
+  --muted-2: #7a828e;
+  --ignition: #ff6a2b;
+  --signal: #3dba86;
+  --warn: #e0a045;
+  --danger: #f07167;
+  --map-wash: #1c2228;
+  --map-wash-deep: #151a1f;
+  --body-glow: rgba(255, 106, 43, 0.08);
+  --body-top: #101318;
+  --body-bottom: #0c0e12;
+  --masthead-bg: rgba(18, 20, 26, 0.94);
+  --toggle-bg: rgba(26, 29, 36, 0.94);
+  color-scheme: dark;
 }
 
 *,
@@ -40,8 +70,8 @@ body,
 body {
   min-height: 100vh;
   background:
-    radial-gradient(90% 55% at 100% 0%, rgba(226, 74, 18, 0.06), transparent 48%),
-    linear-gradient(180deg, #f7f8f6 0%, var(--paper) 45%, #eceeea 100%);
+    radial-gradient(90% 55% at 100% 0%, var(--body-glow), transparent 48%),
+    linear-gradient(180deg, var(--body-top) 0%, var(--paper) 45%, var(--body-bottom) 100%);
   color: var(--ink);
 }
 
@@ -103,7 +133,7 @@ select {
   z-index: 2000;
   padding: clamp(1.35rem, 3.2vw, 2rem) var(--masthead-pad-x) 1.1rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(243, 244, 242, 0.94);
+  background: var(--masthead-bg);
   backdrop-filter: blur(8px);
   animation: masthead-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -182,7 +212,16 @@ select {
   color: var(--signal);
 }
 
-.masthead-link {
+.masthead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem 1.1rem;
+}
+
+.masthead-link,
+.theme-toggle {
   font-family: var(--font-mono);
   font-size: 0.74rem;
   font-weight: 500;
@@ -191,9 +230,20 @@ select {
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.masthead-link:hover {
+.masthead-link:hover,
+.theme-toggle:hover {
   color: var(--ignition);
   border-bottom-color: color-mix(in srgb, var(--ignition) 55%, transparent);
+}
+
+.theme-toggle {
+  appearance: none;
+  background: transparent;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  padding: 0;
+  cursor: pointer;
 }
 
 @keyframes masthead-in {
@@ -209,7 +259,7 @@ select {
 
 .map-section {
   position: relative;
-  background: #dfe6ea;
+  background: var(--map-wash);
   border-bottom: 1px solid var(--line);
   animation: map-in 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
 }
@@ -218,7 +268,7 @@ select {
   min-height: min(72vh, 760px);
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #e8eef2 0%, #d5dde3 100%);
+  background: linear-gradient(180deg, var(--map-wash) 0%, var(--map-wash-deep) 100%);
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.85rem;
@@ -239,8 +289,8 @@ select {
   top: 0.85rem;
   left: 0.85rem;
   display: inline-flex;
-  border: 1px solid rgba(18, 20, 26, 0.14);
-  background: rgba(255, 253, 249, 0.92);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: var(--toggle-bg);
   backdrop-filter: blur(6px);
 }
 
@@ -272,7 +322,7 @@ select {
   height: min(72vh, 760px);
   min-height: 420px;
   width: 100%;
-  background: #dfe6ea;
+  background: var(--map-wash);
   font-family: var(--font-body);
 }
 
@@ -286,16 +336,16 @@ select {
 }
 
 .leaflet-control-zoom {
-  border: 1px solid rgba(18, 20, 26, 0.14) !important;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   margin-top: 3.4rem !important;
 }
 
 .leaflet-control-zoom a {
-  background: rgba(255, 253, 249, 0.94) !important;
+  background: var(--toggle-bg) !important;
   color: var(--ink) !important;
-  border-color: rgba(18, 20, 26, 0.1) !important;
+  border-color: color-mix(in srgb, var(--ink) 10%, transparent) !important;
   border-radius: 0 !important;
   width: 30px !important;
   height: 30px !important;
@@ -518,6 +568,10 @@ select {
     justify-items: start;
     text-align: left;
     width: 100%;
+  }
+
+  .masthead-actions {
+    justify-content: flex-start;
   }
 
   .footer-inner {
