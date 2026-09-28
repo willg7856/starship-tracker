@@ -48,13 +48,13 @@ function setTheme(theme) {
 function renderShell(root) {
   root.innerHTML = `
     <div class="app">
+      <a class="powered-by" href="https://www.beyondstagezero.com/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        Powered by Beyond Stage Zero
+      </a>
       <header class="masthead">
         <div class="masthead-inner">
           <div class="masthead-brand-block">
-            <a class="powered-by" href="https://www.beyondstagezero.com/">
-              <span class="brand-mark" aria-hidden="true"></span>
-              Powered by Beyond Stage Zero
-            </a>
             <h1 class="masthead-title">
               Live Starship Tracking
               <span class="masthead-title-meta">Flight 14</span>
