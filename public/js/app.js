@@ -46,13 +46,13 @@ function renderShell(root) {
       <header class="masthead">
         <div class="masthead-inner">
           <div class="masthead-brand-block">
-            <a class="brand" href="https://www.beyondstagezero.com/">
+            <a class="powered-by" href="https://www.beyondstagezero.com/">
               <span class="brand-mark" aria-hidden="true"></span>
-              <span class="brand-name">Beyond Stage Zero</span>
+              Powered by Beyond Stage Zero
             </a>
             <h1 class="masthead-title">
-              Starship Tracker
-              <span class="masthead-title-meta">· Flight 14</span>
+              Live Starship Tracking
+              <span class="masthead-title-meta">Flight 14</span>
             </h1>
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
