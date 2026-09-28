@@ -33,6 +33,7 @@ const MOVE_SPEED_MS = 10
 const MOVE_RANGE_KM = 0.15
 const LIFTOFF_AT_KEY = 'bsz-flight14-liftoff-ms'
 const LANDED_ELAPSED_KEY = 'bsz-flight14-landed-elapsed-s'
+const ALTITUDE_ZERO_KEY = 'bsz-flight14-altitude-zero-s'
 let chartsPainted = false
 let liftoffAtMs = readLiftoffAt()
 let liftoffConfirmed = liftoffAtMs != null
@@ -43,7 +44,33 @@ let lastSampleKey = null
 let samplesSeen = 0
 let seenFlying = false
 let landedElapsedSeconds = readLandedElapsed()
+let altitudeZeroElapsedSeconds = readAltitudeZero()
 let clockStopped = false
+
+function readAltitudeZero() {
+  try {
+    const n = Number(localStorage.getItem(ALTITUDE_ZERO_KEY))
+    return Number.isFinite(n) && n > 30 ? n : null
+  } catch {
+    return null
+  }
+}
+
+function rememberAltitudeZero(seconds) {
+  if (!(seconds > 30) || seconds > 20 * 3600) return
+  if (
+    altitudeZeroElapsedSeconds != null &&
+    seconds >= altitudeZeroElapsedSeconds - 0.5
+  ) {
+    return
+  }
+  altitudeZeroElapsedSeconds = seconds
+  try {
+    localStorage.setItem(ALTITUDE_ZERO_KEY, String(seconds))
+  } catch {
+    /* ignore */
+  }
+}
 
 function readLandedElapsed() {
   try {
@@ -579,6 +606,9 @@ function landedClockSeconds(state) {
     Number.isFinite(rangeKm) &&
     rangeKm >= 5
   if (!atRest) return null
+  if (Number.isFinite(state.altitudeZeroElapsedSeconds)) {
+    rememberAltitudeZero(state.altitudeZeroElapsedSeconds)
+  }
   if (Number.isFinite(state.landedElapsedSeconds)) {
     rememberLandedElapsed(state.landedElapsedSeconds, true)
   } else if (
