@@ -93,11 +93,16 @@ export function startTracker(onChange) {
 
   const emit = () => {
     if (state.ship?.current) {
-      const gps = estimateLastMoveGpsTime(
-        state.ship.current,
-        state.spaceNoticesExtension,
-      )
-      state.lastMovedAt = gpsTimeToDate(gps)
+      if (state.positionSource === 'spacex' && state.fetchedAt) {
+        // Prefer telemetry freshness while SpaceX is publishing live fixes.
+        state.lastMovedAt = state.fetchedAt
+      } else {
+        const gps = estimateLastMoveGpsTime(
+          state.ship.current,
+          state.spaceNoticesExtension,
+        )
+        state.lastMovedAt = gpsTimeToDate(gps)
+      }
     } else {
       state.lastMovedAt = null
     }
