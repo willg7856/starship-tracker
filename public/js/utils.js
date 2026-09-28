@@ -56,6 +56,39 @@ export function formatSignedMissionClock(secondsFromLiftoff, forceSign) {
   return days > 0 ? `${sign} ${days}D ${clock}` : `${sign} ${clock}`
 }
 
+/** Metres per second between two fixes. Prefers ECEF when both points have it. */
+export function speedBetweenFixes(prev, next) {
+  if (!prev || !next) return null
+  const dt = next.gps_time - prev.gps_time
+  if (!(dt >= 1) || dt > 180) return null
+  const a = prev.r_ecef
+  const b = next.r_ecef
+  if (
+    Array.isArray(a) &&
+    Array.isArray(b) &&
+    a.length >= 3 &&
+    b.length >= 3 &&
+    [a[0], a[1], a[2], b[0], b[1], b[2]].every(Number.isFinite)
+  ) {
+    return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / dt
+  }
+  if (
+    ![prev.latitude, prev.longitude, next.latitude, next.longitude].every(
+      Number.isFinite,
+    )
+  ) {
+    return null
+  }
+  const groundM =
+    haversineKm(prev.latitude, prev.longitude, next.latitude, next.longitude) *
+    1000
+  const dAlt =
+    Number.isFinite(next.altitude) && Number.isFinite(prev.altitude)
+      ? next.altitude - prev.altitude
+      : 0
+  return Math.hypot(groundM, dAlt) / dt
+}
+
 export function formatSpeedKmh(speedMs) {
   if (!Number.isFinite(speedMs)) return '—'
   if (speedMs < 0) return '0'
