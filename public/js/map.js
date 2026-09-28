@@ -6,25 +6,9 @@ import {
 import { thinLatLonPath } from './trail.js'
 import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
-const MAX_BRIDGE_KM = 1
 const FOLLOW_ZOOM = 8
-/** SpaceX pad-predicted trajectories often publish huge negative altitudes — ignore those. */
-const TRAJ_ALT_MIN_M = -200
-const TRAJ_ALT_MAX_M = 600_000
 const PAD_STILL_ALT_M = 1500
 const PAD_STILL_KM = 5
-
-function isSaneTrajectoryPoint(p) {
-  return (
-    Number.isFinite(p.latitude) &&
-    Number.isFinite(p.longitude) &&
-    Math.abs(p.latitude) <= 90 &&
-    Math.abs(p.longitude) <= 180 &&
-    Number.isFinite(p.altitude) &&
-    p.altitude >= TRAJ_ALT_MIN_M &&
-    p.altitude <= TRAJ_ALT_MAX_M
-  )
-}
 
 function hazardStyle(notice) {
   const text = `${notice.name || ''} ${notice.type || ''}`.toUpperCase()
@@ -494,73 +478,23 @@ export function createMap(container, { prelaunch = false } = {}) {
         syncCameraButtons()
       }
 
-      const snExtensionPath = spaceNoticesExtension.map((p) => [
-        p.latitude,
-        p.longitude,
-      ])
-
-      let fullPath = [...paths.full]
-      if (snExtensionPath.length > 0) {
-        const last = fullPath[fullPath.length - 1]
-        const firstSn = snExtensionPath[0]
-        if (
-          !(
-            last &&
-            haversineKm(last[0], last[1], firstSn[0], firstSn[1]) >
-              MAX_BRIDGE_KM
-          )
-        ) {
-          fullPath = [...fullPath, ...snExtensionPath]
+      // Only the fixes already recorded. SpaceX `trajectory` is the predicted path ahead.
+      const flown = []
+      for (const p of liveTrail) {
+        if (Number.isFinite(p.latitude) && Number.isFinite(p.longitude)) {
+          flown.push([p.latitude, p.longitude])
         }
       }
+      const tip = flown[flown.length - 1]
+      if (!tip || tip[0] !== live[0] || tip[1] !== live[1]) flown.push(live)
+      latestFullPath = flown
 
-      const sxTrajectory = Array.isArray(ship.trajectory) ? ship.trajectory : []
-      if (!meta.hasFlightPath && sxTrajectory.length >= 2) {
-        const sxPath = sxTrajectory
-          .filter(isSaneTrajectoryPoint)
-          .map((p) => [p.latitude, p.longitude])
-        // Prefer the live SpaceX path once it has real motion / altitude.
-        if (sxPath.length >= 2) fullPath = thinLatLonPath(sxPath)
-      }
-
-      // Always extend the displayed path with the live tip.
-      if (
-        fullPath.length &&
-        (fullPath[fullPath.length - 1][0] !== live[0] ||
-          fullPath[fullPath.length - 1][1] !== live[1])
-      ) {
-        fullPath = [...fullPath, live]
-      } else if (!fullPath.length) {
-        fullPath = [live]
-      }
-
-      const livePath = liveTrail.map((p) => [p.latitude, p.longitude])
-      latestFullPath = fullPath
-
-      if (!meta.hasFlightPath && fullPath.length >= 2) {
-        source.ascent = fullPath
-      }
-      source.ascentStyle = {
-        color: '#ff5a1f',
-        weight: 3,
-        opacity: 0.95,
-      }
-      source.reentryStyle = {
-        color: '#e64613',
-        weight: 3,
-        opacity: 0.95,
-      }
-
-      source.live = null
-      source.liveStyle = null
-      if (livePath.length >= 2) {
-        source.live = thinLatLonPath(livePath)
-        source.liveStyle = {
-          color: '#ffc400',
-          weight: 2.5,
-          opacity: 0.95,
-        }
-      }
+      source.ascent = null
+      source.reentry = null
+      source.live = flown.length >= 2 ? thinLatLonPath(flown) : null
+      source.liveStyle = source.live
+        ? { color: '#ff5a1f', weight: 3, opacity: 0.95 }
+        : null
 
       if (landed && meta.landingFix && !stillOnPad) {
         source.landing = {
