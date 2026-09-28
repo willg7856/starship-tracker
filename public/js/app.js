@@ -1,9 +1,10 @@
 import { drawTelemetryCharts, recordTelemetrySample } from './charts.js'
 import { distanceAlongTrailKm, loadLiveTrail } from './trail.js'
 import { createMap } from './map.js'
-import { getMeta, loadTrack, setPlannedLiftoffMs } from './path.js'
+import { getMeta, loadTrack, setActualLiftoffMs, setPlannedLiftoffMs } from './path.js'
 import { startTracker } from './tracker.js'
 import {
+  GPS_TO_UNIX_OFFSET,
   SPACEX_VEHICLE_TRACKER,
   describeLocation,
   formatAltitudeKm,
@@ -427,9 +428,50 @@ function confirmLiftoff(atMs) {
 }
 
 /**
+ * Liftoff implied by SpaceX mission_time. On the pad that field has already
+ * been ticking for hours, so it only counts once the ship is clearly flying
+ * and the result sits near the planned T-0.
+ */
+function officialLiftoffMs(state) {
+  if (!clearlyAirborne(state)) return null
+  const current = state.ship.current
+  const mission = current.mission_time
+  const gps = current.gps_time
+  if (!Number.isFinite(mission) || !Number.isFinite(gps)) return null
+  if (mission < 1 || mission > 20 * 3600) return null
+  const fixMs = (gps + GPS_TO_UNIX_OFFSET) * 1000
+  const liftoff = fixMs - mission * 1000
+  if (liftoff > fixMs || fixMs - liftoff > 20 * 3600 * 1000) return null
+  const planned = getMeta().plannedLiftoffMs
+  if (typeof planned === 'number' && Math.abs(liftoff - planned) > 30 * 60 * 1000) {
+    return null
+  }
+  return liftoff
+}
+
+function clearlyAirborne(state) {
+  const current = state?.ship?.current
+  if (!current) return false
+  if (
+    Number.isFinite(current.altitude) &&
+    current.altitude >= 2000 &&
+    current.altitude < 600_000
+  ) {
+    return true
+  }
+  if (Number.isFinite(current.latitude) && Number.isFinite(current.longitude)) {
+    const pad = getMeta().launchPad
+    if (haversineKm(pad.lat, pad.lon, current.latitude, current.longitude) >= 5) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * Watch live fixes. T+ starts only after two moving samples, and only if we
- * already saw the ship sitting on the pad. A page opened mid-flight keeps
- * counting from the planned liftoff instead.
+ * already saw the ship sitting on the pad. A page opened mid-flight uses
+ * SpaceX mission elapsed time instead of the planned clock.
  */
 function observePad(state, nowMs) {
   const key = sampleKey(state)
@@ -458,6 +500,7 @@ function observePad(state, nowMs) {
 
 /** Still on the countdown, including a frozen T- 0:00:00 after the planned time. */
 function holdingCountdown(state) {
+  if (officialLiftoffMs(state) != null) return false
   if (liftoffConfirmed) return false
   if (startedToMove(state) && !sawOnPad && samplesSeen > 0) return false
   return true
@@ -468,6 +511,11 @@ function holdingCountdown(state) {
  */
 function missionOffsetSeconds(state, nowMs) {
   observePad(state, nowMs)
+  const official = officialLiftoffMs(state)
+  if (official != null) {
+    setActualLiftoffMs(official)
+    return Math.max(0, (nowMs - official) / 1000)
+  }
   if (liftoffConfirmed && liftoffAtMs != null) {
     return Math.max(0, (nowMs - liftoffAtMs) / 1000)
   }

@@ -3,12 +3,15 @@ import {
   appendLiveFix,
   estimateLastMoveGpsTime,
   loadLiveTrail,
+  mergeTrailAhead,
+  pointsFromNoticesCoordinates,
   saveLiveTrail,
 } from './trail.js'
 import { gpsTimeToDate, speedBetweenFixes } from './utils.js'
 
 const POLL_MS = 1_000
 const SPACE_NOTICES_POLL_MS = 60_000
+const SHIP_TRAIL_POLL_MS = 30_000
 const SHIP_KEY = 'ship41'
 const LAST_FIX_KEY = 'bsz-ship41-last-fix-v1'
 
@@ -170,6 +173,64 @@ export function startTracker(onChange) {
   const controller = new AbortController()
   let hasLoaded = false
   let positionSource = null
+  let noticesCoordinates = null
+
+  function applySharedTrail() {
+    const current = state.ship?.current
+    if (!noticesCoordinates || !current) return
+    let pad = null
+    try {
+      pad = getMeta().launchPad
+    } catch {
+      pad = null
+    }
+    const history = pointsFromNoticesCoordinates(noticesCoordinates, current, pad)
+    if (history.length < 2) return
+    const merged = mergeTrailAhead(history, state.liveTrail)
+    state.liveTrail = merged
+    saveLiveTrail(merged)
+    applySpeedFromTrail()
+  }
+
+  function applySpeedFromTrail() {
+    const current = state.ship?.current
+    const trail = state.liveTrail
+    if (!current || !trail || trail.length < 2) return
+    if (Number.isFinite(current.speed) && current.speed > 1) return
+    const spd = speedBetweenFixes(trail[trail.length - 2], trail[trail.length - 1])
+    if (!Number.isFinite(spd) || spd <= 1 || spd >= 12_000) return
+    lastDerivedSpeed = spd
+    const tip = trail[trail.length - 1]
+    lastSpeedFix = {
+      gps_time: tip.gps_time,
+      latitude: tip.latitude,
+      longitude: tip.longitude,
+      altitude: tip.altitude,
+      r_ecef: tip.r_ecef,
+      derivedSpeed: spd,
+    }
+    state.ship = {
+      ...state.ship,
+      current: { ...current, speed: spd },
+    }
+  }
+
+  async function loadSharedTrail() {
+    try {
+      const res = await fetch('/api/ship-trail', {
+        signal: controller.signal,
+        cache: 'no-store',
+      })
+      if (!res.ok) return
+      const body = await res.json()
+      if (!Array.isArray(body?.coordinates) || body.coordinates.length < 2) return
+      noticesCoordinates = body.coordinates
+      applySharedTrail()
+      emit()
+    } catch {
+      /* the live fix still draws; history fills in on the next poll */
+    }
+  }
 
   async function loadFromSpaceNotices() {
     const points = await fetchSpaceNoticesShip41(controller.signal)
@@ -207,6 +268,7 @@ export function startTracker(onChange) {
           state.liveTrail = next
           saveLiveTrail(next)
         }
+        applySharedTrail()
         return
       }
       const ok = await loadFromSpaceNotices()
@@ -252,12 +314,15 @@ export function startTracker(onChange) {
 
   void load()
   void loadSpaceNotices()
+  void loadSharedTrail()
   const pollId = setInterval(() => void load(), POLL_MS)
   const snId = setInterval(() => void loadSpaceNotices(), SPACE_NOTICES_POLL_MS)
+  const trailId = setInterval(() => void loadSharedTrail(), SHIP_TRAIL_POLL_MS)
 
   return () => {
     controller.abort()
     clearInterval(pollId)
     clearInterval(snId)
+    clearInterval(trailId)
   }
 }

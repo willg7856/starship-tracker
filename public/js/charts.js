@@ -168,7 +168,7 @@ function drawChart(canvas, points, { color, formatY, yFloor, timeOrigin = null, 
 
 function liftoffGpsSeconds() {
   try {
-    const ms = getMeta().plannedLiftoffMs
+    const ms = getMeta().actualLiftoffMs ?? getMeta().plannedLiftoffMs
     if (typeof ms !== 'number') return null
     return ms / 1000 - GPS_TO_UNIX_OFFSET
   } catch {
@@ -240,10 +240,8 @@ function altitudeSeries() {
     points.length = 0
     points.push(...flown)
     const first = points[0]
-    if (!first || first.t > launch + 1 || first.alt > 500) {
+    if (!first || Math.abs(first.t - launch) > 1 || first.alt !== 0) {
       points.unshift({ t: launch, alt: 0 })
-    } else {
-      points[0] = { t: launch, alt: 0 }
     }
   } else if (points.length && points[0].alt !== 0) {
     points.unshift({ t: points[0].t, alt: 0 })

@@ -99,6 +99,169 @@ export function distanceAlongTrailKm(points) {
   return meters / 1000
 }
 
+const WGS84_A = 6378137
+const WGS84_E2 = 6.69437999014e-3
+
+function ecefMeters(lat, lon, alt) {
+  const φ = (lat * Math.PI) / 180
+  const λ = (lon * Math.PI) / 180
+  const s = Math.sin(φ)
+  const c = Math.cos(φ)
+  const n = WGS84_A / Math.sqrt(1 - WGS84_E2 * s * s)
+  return [
+    (n + alt) * c * Math.cos(λ),
+    (n + alt) * c * Math.sin(λ),
+    (n * (1 - WGS84_E2) + alt) * s,
+  ]
+}
+
+function ecefDistanceMeters(a, b) {
+  const [ax, ay, az] = ecefMeters(a.lat, a.lon, a.alt)
+  const [bx, by, bz] = ecefMeters(b.lat, b.lon, b.alt)
+  return Math.hypot(bx - ax, by - ay, bz - az)
+}
+
+/** Cruise samples are one SpaceX fix per 30s. Speed is that spacing. */
+function orbitalSpeedMs(flight) {
+  const dists = []
+  for (let i = 1; i < flight.length; i++) {
+    if (flight[i - 1].alt > 200_000 && flight[i].alt > 200_000) {
+      dists.push(ecefDistanceMeters(flight[i - 1], flight[i]))
+    }
+  }
+  if (dists.length < 4) return 7330
+  dists.sort((a, b) => a - b)
+  return dists[Math.floor(dists.length / 2)] / 30
+}
+
+function segmentSeconds(a, b, speedMs) {
+  const meters = ecefDistanceMeters(a, b)
+  const fast = a.alt > 150_000 && b.alt > 150_000
+  if (fast || meters / 30 > 6000) {
+    return Math.min(120, Math.max(5, meters / speedMs))
+  }
+  return 30
+}
+
+/**
+ * Space Notices keeps the flown Ship 41 track (lon, lat, alt), without times.
+ * Pin the ends to liftoff and the live SpaceX fix, and space the samples the
+ * way they were recorded. Drop anything past the current position.
+ */
+export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
+  if (!Array.isArray(coordinates) || !anchor || !Number.isFinite(anchor.gps_time)) {
+    return []
+  }
+  const raw = []
+  for (const c of coordinates) {
+    let lon
+    let lat
+    let alt
+    if (Array.isArray(c)) {
+      ;[lon, lat, alt] = c
+    } else if (c) {
+      lon = c.longitude ?? c.lon
+      lat = c.latitude ?? c.lat
+      alt = c.altitude ?? c.alt
+    }
+    if (![lon, lat, alt].every(Number.isFinite)) continue
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue
+    if (alt < -500 || alt > 600_000) continue
+    raw.push({ lon, lat, alt })
+  }
+  const start = raw.findIndex((p) => p.alt >= 200)
+  if (start < 0) return []
+  let flight = raw.slice(start)
+  if (
+    Number.isFinite(anchor.latitude) &&
+    Number.isFinite(anchor.longitude)
+  ) {
+    let tip = flight.length - 1
+    for (let i = flight.length - 1; i >= 0; i--) {
+      const d = haversineKm(flight[i].lat, flight[i].lon, anchor.latitude, anchor.longitude)
+      if (d < 40) {
+        tip = i
+        break
+      }
+    }
+    flight = flight.slice(0, tip + 1)
+  }
+  if (flight.length < 2) return []
+
+  const speedMs = orbitalSpeedMs(flight)
+  const segs = []
+  for (let i = 1; i < flight.length; i++) {
+    segs.push(segmentSeconds(flight[i - 1], flight[i], speedMs))
+  }
+  let span = segs.reduce((sum, dt) => sum + dt, 0)
+  const tipGapKm = haversineKm(
+    flight[flight.length - 1].lat,
+    flight[flight.length - 1].lon,
+    anchor.latitude,
+    anchor.longitude,
+  )
+  const tipLag =
+    Number.isFinite(tipGapKm) && tipGapKm < 2000 ? tipGapKm / (speedMs / 1000) : 0
+  const tipGps = anchor.gps_time - tipLag
+  const mission = anchor.mission_time
+  const liftoffGps =
+    Number.isFinite(mission) && mission > 1 && mission < 20 * 3600
+      ? anchor.gps_time - mission
+      : null
+  if (liftoffGps != null && tipGps - liftoffGps > 30 && span > 0) {
+    const scale = (tipGps - liftoffGps) / span
+    if (scale > 0.5 && scale < 1.5) {
+      for (let i = 0; i < segs.length; i++) segs[i] *= scale
+      span = tipGps - liftoffGps
+    }
+  }
+
+  let t = tipGps - span
+  const points = []
+  if (
+    pad &&
+    Number.isFinite(pad.lat) &&
+    Number.isFinite(pad.lon) &&
+    liftoffGps != null &&
+    t >= liftoffGps - 1
+  ) {
+    points.push({
+      gps_time: Math.min(liftoffGps, t) - 0.01,
+      latitude: pad.lat,
+      longitude: pad.lon,
+      altitude: 0,
+    })
+  }
+  points.push({
+    gps_time: t,
+    latitude: flight[0].lat,
+    longitude: flight[0].lon,
+    altitude: flight[0].alt,
+  })
+  for (let i = 1; i < flight.length; i++) {
+    t += segs[i - 1]
+    points.push({
+      gps_time: t,
+      latitude: flight[i].lat,
+      longitude: flight[i].lon,
+      altitude: flight[i].alt,
+    })
+  }
+  return points
+}
+
+/** Keep the shared track, and add live fixes that are newer than its tip. */
+export function mergeTrailAhead(history, local) {
+  if (!Array.isArray(history) || history.length === 0) return Array.isArray(local) ? local : []
+  const tip = history[history.length - 1].gps_time
+  let trail = history
+  const newer = (Array.isArray(local) ? local : [])
+    .filter((p) => Number.isFinite(p?.gps_time) && p.gps_time > tip + 1)
+    .sort((a, b) => a.gps_time - b.gps_time)
+  for (const point of newer) trail = appendLiveFix(trail, point)
+  return trail
+}
+
 export function loadLiveTrail() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)

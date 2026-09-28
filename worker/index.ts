@@ -141,6 +141,15 @@ export default {
       return flight14LaunchTime()
     }
 
+    if (pathname === '/api/ship-trail') {
+      return proxyUpstream({
+        upstream:
+          'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-14-ship-41-trajectory',
+        cacheControl: 'public, max-age=15, s-maxage=15',
+        errorLabel: 'Ship trail',
+      })
+    }
+
     if (pathname === '/api/space-notices-ship41') {
       return proxyUpstream({
         upstream: 'https://data.space-notices.com/space-notices-data/ship-41',
