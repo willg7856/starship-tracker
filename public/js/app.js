@@ -21,6 +21,7 @@ const SPACEX_WEBCAST =
 /** Space.com simulcast of the SpaceX Flight 14 webcast. Official player cannot be embedded. */
 const LIVESTREAM_EMBED =
   'https://www.youtube-nocookie.com/embed/CxHNK4UeVP4?rel=0&modestbranding=1'
+const LIVESTREAM_KEY = 'bsz-livestream-url'
 /** Clear of the pad + climbing — SpaceX often ticks mission_time on the pad. */
 const LIFTOFF_ALT_M = 1500
 const LIFTOFF_SPEED_MS = 80
@@ -101,12 +102,27 @@ function renderShell(root) {
             <div>
               <h2>Livestream</h2>
               <p>
-                Space.com simulcast of the SpaceX webcast.
-                <a href="${SPACEX_WEBCAST}" target="_blank" rel="noreferrer">Watch on SpaceX</a>
+                Paste a YouTube or Twitch link, or watch the
+                <a href="${SPACEX_WEBCAST}" target="_blank" rel="noreferrer">SpaceX webcast</a>
+                simulcast.
               </p>
             </div>
             <button type="button" class="livestream-close">Close</button>
           </div>
+          <form class="livestream-form">
+            <label class="visually-hidden" for="livestream-url">Livestream link</label>
+            <input
+              id="livestream-url"
+              type="url"
+              inputmode="url"
+              placeholder="Paste a YouTube or Twitch link"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="submit">Play</button>
+            <button type="button" class="livestream-reset">Flight 14</button>
+          </form>
+          <p class="livestream-note" hidden></p>
           <div class="livestream-frame">
             <iframe
               title="Starship Flight 14 livestream"
@@ -165,12 +181,44 @@ function renderShell(root) {
   const watchBtn = document.querySelector('.watch-toggle')
   const livestream = document.querySelector('.livestream')
   const livestreamFrame = livestream.querySelector('iframe')
+  const livestreamForm = livestream.querySelector('.livestream-form')
+  const livestreamInput = livestream.querySelector('#livestream-url')
+  const livestreamNote = livestream.querySelector('.livestream-note')
+
+  const savedStream = (() => {
+    try {
+      return localStorage.getItem(LIVESTREAM_KEY) || ''
+    } catch {
+      return ''
+    }
+  })()
+  if (savedStream) livestreamInput.value = savedStream
+
+  const showStreamNote = (message) => {
+    if (!message) {
+      livestreamNote.hidden = true
+      livestreamNote.textContent = ''
+      return
+    }
+    livestreamNote.hidden = false
+    livestreamNote.textContent = message
+  }
+
+  const playStream = (embed, sourceLabel) => {
+    livestreamFrame.src = embed
+    showStreamNote(sourceLabel || '')
+  }
+
   const setLivestreamOpen = (open) => {
     livestream.hidden = !open
     watchBtn.setAttribute('aria-expanded', String(open))
     watchBtn.classList.toggle('active', open)
     if (open && !livestreamFrame.src) {
-      livestreamFrame.src = LIVESTREAM_EMBED
+      const custom = embedFromLivestreamUrl(livestreamInput.value)
+      playStream(custom || LIVESTREAM_EMBED, custom ? '' : '')
+      if (livestreamInput.value.trim() && !custom) {
+        showStreamNote('That link can’t be embedded. Use a YouTube or Twitch URL.')
+      }
     }
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
   }
@@ -179,6 +227,30 @@ function renderShell(root) {
   })
   livestream.querySelector('.livestream-close').addEventListener('click', () => {
     setLivestreamOpen(false)
+  })
+  livestreamForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const raw = livestreamInput.value.trim()
+    const embed = embedFromLivestreamUrl(raw)
+    if (!embed) {
+      showStreamNote('That link can’t be embedded. Use a YouTube or Twitch URL.')
+      return
+    }
+    try {
+      localStorage.setItem(LIVESTREAM_KEY, raw)
+    } catch {
+      /* ignore */
+    }
+    playStream(embed)
+  })
+  livestream.querySelector('.livestream-reset').addEventListener('click', () => {
+    livestreamInput.value = ''
+    try {
+      localStorage.removeItem(LIVESTREAM_KEY)
+    } catch {
+      /* ignore */
+    }
+    playStream(LIVESTREAM_EMBED)
   })
 
   const topbar = document.querySelector('.topbar')
@@ -190,6 +262,56 @@ function renderShell(root) {
     syncTopbar()
     drawTelemetryCharts()
   })
+}
+
+function youtubeEmbed(id) {
+  if (!/^[\w-]{6,}$/.test(id)) return null
+  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?rel=0&modestbranding=1`
+}
+
+/** Turn a pasted YouTube or Twitch link into an embeddable player URL. */
+function embedFromLivestreamUrl(raw) {
+  if (!raw || !raw.trim()) return null
+  let url
+  try {
+    url = new URL(raw.trim())
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+  const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '')
+
+  if (host === 'youtu.be') {
+    const id = url.pathname.split('/').filter(Boolean)[0]
+    return id ? youtubeEmbed(id) : null
+  }
+  if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    if (url.pathname === '/watch') return youtubeEmbed(url.searchParams.get('v') || '')
+    const match = url.pathname.match(/^\/(?:live|embed|shorts)\/([^/?]+)/)
+    if (match) return youtubeEmbed(match[1])
+    return null
+  }
+  if (host === 'twitch.tv' || host === 'player.twitch.tv') {
+    const parent = encodeURIComponent(window.location.hostname)
+    const channelParam = url.searchParams.get('channel')
+    if (channelParam) {
+      return `https://player.twitch.tv/?channel=${encodeURIComponent(channelParam)}&parent=${parent}`
+    }
+    const videoParam = url.searchParams.get('video')
+    if (videoParam) {
+      return `https://player.twitch.tv/?video=${encodeURIComponent(videoParam)}&parent=${parent}`
+    }
+    const video = url.pathname.match(/^\/videos\/(\d+)/)
+    if (video) return `https://player.twitch.tv/?video=${video[1]}&parent=${parent}`
+    const channel = url.pathname.split('/').filter(Boolean)[0]
+    if (
+      channel &&
+      !['directory', 'downloads', 'settings', 'subscriptions', 'wallet'].includes(channel)
+    ) {
+      return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&parent=${parent}`
+    }
+  }
+  return null
 }
 
 function liveMissionTime(state, nowMs) {
