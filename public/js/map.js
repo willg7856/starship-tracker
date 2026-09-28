@@ -9,8 +9,6 @@ import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const MAX_BRIDGE_KM = 1
 const FOLLOW_ZOOM = 8
-/** Draw overlays on neighboring world copies so wrapping maps stay populated. */
-const LON_WRAPS = [0]
 
 function hazardStyle(notice) {
   const text = `${notice.name || ''} ${notice.type || ''}`.toUpperCase()
@@ -66,6 +64,10 @@ function clearLayerList(map, list) {
   list.length = 0
 }
 
+function sameWraps(a, b) {
+  return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
 export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
@@ -80,7 +82,9 @@ export function createMap(container, { prelaunch = false } = {}) {
   let latestFullPath = []
   let latestDriftFrame = []
   let userInteracting = false
-  let layers = {
+  let activeWraps = [0]
+
+  const layers = {
     ascent: [],
     reentry: [],
     drift: [],
@@ -93,6 +97,33 @@ export function createMap(container, { prelaunch = false } = {}) {
     plannedLanding: [],
   }
 
+  // Canonical geometry (unwrapped, primary world). Rebuild wraps from these.
+  const source = {
+    ascent: paths.ascent.length >= 2 ? paths.ascent : null,
+    reentry: paths.reentry.length >= 2 ? paths.reentry : null,
+    ascentStyle: { color: '#ff5a1f', weight: 3, opacity: 0.95 },
+    reentryStyle: { color: '#e64613', weight: 3, opacity: 0.95 },
+    drift: [],
+    live: null,
+    liveStyle: null,
+    launch: {
+      latlng: [meta.launchPad.lat, meta.launchPad.lon],
+      popup: `<strong>Liftoff</strong><br>${meta.launchPad.label}`,
+    },
+    landing: null,
+    plannedLanding:
+      prelaunch && meta.landingFix
+        ? {
+            latlng: [meta.landingFix.lat, meta.landingFix.lon],
+            popup: `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
+              meta.landingFix.lat,
+              meta.landingFix.lon,
+            )}`,
+          }
+        : null,
+    ship: null,
+  }
+
   const initialCenter = prelaunch
     ? [meta.launchPad.lat, meta.launchPad.lon]
     : meta.landingFix
@@ -102,14 +133,9 @@ export function createMap(container, { prelaunch = false } = {}) {
   const map = L.map(container, {
     zoomControl: true,
     attributionControl: false,
-    worldCopyJump: false,
-    maxBounds: [
-      [-85, -180],
-      [85, 180],
-    ],
-    maxBoundsViscosity: 1,
+    worldCopyJump: true,
     maxZoom: 18,
-    minZoom: 2,
+    minZoom: 1,
     zoomSnap: 0.1,
     zoomDelta: 0.5,
     scrollWheelZoom: true,
@@ -117,11 +143,11 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 18, noWrap: true, bounds: [
-      [-85, -180],
-      [85, 180],
-    ] },
+    { maxZoom: 18 },
   ).addTo(map)
+
+  // Canvas is more reliable for many wrapped polygons than SVG.
+  const vectorRenderer = L.canvas({ padding: 0.75 })
 
   const launchIcon = L.divIcon({
     className: 'path-marker launch-marker',
@@ -136,93 +162,159 @@ export function createMap(container, { prelaunch = false } = {}) {
     iconAnchor: [7, 7],
   })
 
-  function addWrappedMarkers(latlng, icon, popupHtml, bucket) {
-    for (const offset of LON_WRAPS) {
-      const marker = L.marker(shiftLatLng(latlng, offset), { icon })
-        .bindPopup(popupHtml)
-        .addTo(map)
-      bucket.push(marker)
-    }
+  function wrapsForView() {
+    const bounds = map.getBounds()
+    const west = bounds.getWest()
+    const east = bounds.getEast()
+    // Cover the visible range plus one world on each side for smooth pans.
+    const start = Math.floor(west / 360) * 360 - 360
+    const end = Math.ceil(east / 360) * 360 + 360
+    const out = []
+    for (let offset = start; offset <= end; offset += 360) out.push(offset)
+    return out.length ? out : [0]
   }
 
-  function addWrappedPolyline(points, style, bucket) {
+  function addPolylineCopies(points, style, bucket) {
     if (!points || points.length < 2) return
     const unwrapped = unwrapRing(points)
-    for (const offset of LON_WRAPS) {
-      const layer = L.polyline(shiftLatLngs(unwrapped, offset), style).addTo(map)
-      bucket.push(layer)
+    for (const offset of activeWraps) {
+      bucket.push(
+        L.polyline(shiftLatLngs(unwrapped, offset), {
+          ...style,
+          renderer: vectorRenderer,
+        }).addTo(map),
+      )
     }
   }
 
-  function addWrappedPolygon(ring, style, popupHtml, bucket) {
+  function addPolygonCopies(ring, style, popupHtml, bucket) {
     if (!ring || ring.length < 3) return
     const unwrapped = unwrapRing(ring)
-    for (const offset of LON_WRAPS) {
-      const layer = L.polygon(shiftLatLngs(unwrapped, offset), style)
+    for (const offset of activeWraps) {
+      const layer = L.polygon(shiftLatLngs(unwrapped, offset), {
+        ...style,
+        renderer: vectorRenderer,
+      })
       if (popupHtml) layer.bindPopup(popupHtml)
       layer.addTo(map)
       bucket.push(layer)
     }
   }
 
-  function setWrappedStyle(bucket, style) {
-    for (const layer of bucket) layer.setStyle(style)
+  function addMarkerCopies(latlng, icon, popupHtml, bucket) {
+    for (const offset of activeWraps) {
+      bucket.push(
+        L.marker(shiftLatLng(latlng, offset), { icon })
+          .bindPopup(popupHtml)
+          .addTo(map),
+      )
+    }
   }
 
-  addWrappedMarkers(
-    [meta.launchPad.lat, meta.launchPad.lon],
-    launchIcon,
-    `<strong>Liftoff</strong><br>${meta.launchPad.label}`,
-    layers.launch,
-  )
-
-  if (paths.ascent.length >= 2) {
-    addWrappedPolyline(
-      paths.ascent,
-      { color: '#ff5a1f', weight: 3, opacity: 0.95 },
-      layers.ascent,
-    )
-  }
-  if (paths.reentry.length >= 2) {
-    addWrappedPolyline(
-      paths.reentry,
-      { color: '#e64613', weight: 3, opacity: 0.95 },
-      layers.reentry,
-    )
-  }
-
-  if (prelaunch && meta.landingFix) {
-    addWrappedMarkers(
-      [meta.landingFix.lat, meta.landingFix.lon],
-      landingIcon,
-      `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
-        meta.landingFix.lat,
-        meta.landingFix.lon,
-      )}`,
-      layers.plannedLanding,
-    )
-  }
-
-  function clearHazardLayers() {
+  function rebuildHazards() {
     clearLayerList(map, layers.hazards)
-  }
-
-  function renderHazards() {
-    clearHazardLayers()
     if (!showHazards) return
     for (const notice of notices) {
-      const rings = notice.polygons || []
       const title = notice.name || notice.id || 'Hazard zone'
       const kind = notice.type ? ` <span>${notice.type}</span>` : ''
       const popup = `<strong>Hazard zone</strong>${kind}<br>${title.replace(/</g, '&lt;')}`
       const style = hazardStyle(notice)
-      for (const ring of rings) {
-        addWrappedPolygon(ring, style, popup, layers.hazards)
+      for (const ring of notice.polygons || []) {
+        addPolygonCopies(ring, style, popup, layers.hazards)
       }
     }
   }
 
-  renderHazards()
+  function rebuildStaticMarkers() {
+    clearLayerList(map, layers.launch)
+    clearLayerList(map, layers.plannedLanding)
+    clearLayerList(map, layers.landing)
+    if (source.launch) {
+      addMarkerCopies(
+        source.launch.latlng,
+        launchIcon,
+        source.launch.popup,
+        layers.launch,
+      )
+    }
+    if (source.plannedLanding) {
+      addMarkerCopies(
+        source.plannedLanding.latlng,
+        landingIcon,
+        source.plannedLanding.popup,
+        layers.plannedLanding,
+      )
+    }
+    if (source.landing) {
+      addMarkerCopies(
+        source.landing.latlng,
+        landingIcon,
+        source.landing.popup,
+        layers.landing,
+      )
+    }
+  }
+
+  function rebuildPaths() {
+    clearLayerList(map, layers.ascent)
+    clearLayerList(map, layers.reentry)
+    clearLayerList(map, layers.drift)
+    clearLayerList(map, layers.live)
+    if (source.ascent) addPolylineCopies(source.ascent, source.ascentStyle, layers.ascent)
+    if (source.reentry) {
+      addPolylineCopies(source.reentry, source.reentryStyle, layers.reentry)
+    }
+    for (const seg of source.drift) {
+      addPolylineCopies(seg.points, seg.style, layers.drift)
+    }
+    if (source.live) {
+      addPolylineCopies(source.live, source.liveStyle, layers.live)
+    }
+  }
+
+  function rebuildShip() {
+    clearLayerList(map, layers.ship)
+    clearLayerList(map, layers.shipHalo)
+    if (!source.ship) return
+    const { latlng, radius, halo, popup } = source.ship
+    for (const offset of activeWraps) {
+      const pos = shiftLatLng(latlng, offset)
+      layers.shipHalo.push(
+        L.circleMarker(pos, {
+          radius: halo,
+          color: '#ff5a1f',
+          fillOpacity: 0,
+          weight: 1,
+          opacity: 0.45,
+          renderer: vectorRenderer,
+        }).addTo(map),
+      )
+      layers.ship.push(
+        L.circleMarker(pos, {
+          radius,
+          color: '#ff5a1f',
+          fillColor: '#ff5a1f',
+          fillOpacity: 0.95,
+          weight: 2,
+          renderer: vectorRenderer,
+        })
+          .bindPopup(popup)
+          .addTo(map),
+      )
+    }
+  }
+
+  function rebuildAllWraps(force = false) {
+    const next = wrapsForView()
+    if (!force && sameWraps(next, activeWraps)) return
+    activeWraps = next
+    rebuildHazards()
+    rebuildStaticMarkers()
+    rebuildPaths()
+    rebuildShip()
+  }
+
+  rebuildAllWraps(true)
 
   const shell = container.closest('.map-shell') || container.parentElement
 
@@ -267,7 +359,7 @@ export function createMap(container, { prelaunch = false } = {}) {
         showHazards = !showHazards
         hazardBtn.classList.toggle('active', showHazards)
         hazardBtn.setAttribute('aria-pressed', String(showHazards))
-        renderHazards()
+        rebuildHazards()
         if (camera === 'wide') {
           fittedCamera = null
           applyCamera(true)
@@ -402,21 +494,20 @@ export function createMap(container, { prelaunch = false } = {}) {
     }
   })
 
-  function clearDriftLayers() {
-    clearLayerList(map, layers.drift)
-    clearLayerList(map, layers.live)
-  }
+  map.on('moveend zoomend', () => {
+    rebuildAllWraps(false)
+  })
 
   return {
     update({ ship, liveTrail = [], spaceNoticesExtension = [] }) {
       if (!ship?.current) {
+        rebuildAllWraps(false)
         map.invalidateSize()
         return
       }
 
-      if (layers.plannedLanding.length) {
-        clearLayerList(map, layers.plannedLanding)
-      }
+      // Live tracking replaces the planned splashdown marker.
+      source.plannedLanding = null
 
       const current = ship.current
       const live = [current.latitude, current.longitude]
@@ -499,29 +590,33 @@ export function createMap(container, { prelaunch = false } = {}) {
       latestFullPath = fullPath
       latestDriftFrame = driftFrame
 
-      clearDriftLayers()
-      for (const segment of oceanDriftCleanSegments) {
-        if (segment.length < 2) continue
-        addWrappedPolyline(
-          segment,
-          {
+      source.drift = oceanDriftCleanSegments
+        .filter((segment) => segment.length >= 2)
+        .map((points) => ({
+          points,
+          style: {
             color: '#ffc400',
             weight: view === 'drift' ? 4 : 2.5,
             opacity: 0.95,
           },
-          layers.drift,
-        )
-      }
+        }))
 
       if (!meta.hasFlightPath && fullPath.length >= 2) {
-        clearLayerList(map, layers.ascent)
-        addWrappedPolyline(
-          fullPath,
-          { color: '#ff5a1f', weight: 3, opacity: 0.95 },
-          layers.ascent,
-        )
+        source.ascent = fullPath
+      }
+      source.ascentStyle = {
+        color: '#ff5a1f',
+        weight: 3,
+        opacity: view === 'flight' ? 0.95 : 0.55,
+      }
+      source.reentryStyle = {
+        color: '#e64613',
+        weight: 3,
+        opacity: view === 'flight' ? 0.95 : 0.55,
       }
 
+      source.live = null
+      source.liveStyle = null
       if (landed && livePath.length) {
         const tipSeg = oceanDriftCleanSegments[oceanDriftCleanSegments.length - 1]
         const anchor = tipSeg?.[tipSeg.length - 1]
@@ -548,80 +643,46 @@ export function createMap(container, { prelaunch = false } = {}) {
           pts = pts.length >= 2 ? thinLatLonPath(pts) : null
         }
         if (pts) {
-          addWrappedPolyline(
-            pts,
-            {
-              color: '#ffc400',
-              weight: view === 'drift' ? 4 : 2.5,
-              opacity: 0.95,
-            },
-            layers.live,
-          )
+          source.live = pts
+          source.liveStyle = {
+            color: '#ffc400',
+            weight: view === 'drift' ? 4 : 2.5,
+            opacity: 0.95,
+          }
         }
       }
 
-      setWrappedStyle(layers.ascent, {
-        opacity: view === 'flight' ? 0.95 : 0.55,
-      })
-      setWrappedStyle(layers.reentry, {
-        opacity: view === 'flight' ? 0.95 : 0.55,
-      })
-
       if (landed && meta.landingFix) {
-        if (!layers.landing.length) {
-          addWrappedMarkers(
-            [meta.landingFix.lat, meta.landingFix.lon],
-            landingIcon,
-            `<strong>Splashdown</strong><br>${formatLatLon(
-              meta.landingFix.lat,
-              meta.landingFix.lon,
-            )}`,
-            layers.landing,
-          )
+        source.landing = {
+          latlng: [meta.landingFix.lat, meta.landingFix.lon],
+          popup: `<strong>Splashdown</strong><br>${formatLatLon(
+            meta.landingFix.lat,
+            meta.landingFix.lon,
+          )}`,
         }
-      } else if (layers.landing.length) {
-        clearLayerList(map, layers.landing)
+      } else {
+        source.landing = null
       }
 
       const radius = view === 'drift' ? 11 : 9
       const halo = view === 'drift' ? 22 : 18
       const shipLabel = meta.vehicle || 'Ship 41'
-      const popup = `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`
-      if (!layers.ship.length) {
-        for (const offset of LON_WRAPS) {
-          const pos = shiftLatLng(live, offset)
-          layers.shipHalo.push(
-            L.circleMarker(pos, {
-              radius: halo,
-              color: '#ff5a1f',
-              fillOpacity: 0,
-              weight: 1,
-              opacity: 0.45,
-            }).addTo(map),
-          )
-          layers.ship.push(
-            L.circleMarker(pos, {
-              radius,
-              color: '#ff5a1f',
-              fillColor: '#ff5a1f',
-              fillOpacity: 0.95,
-              weight: 2,
-            })
-              .bindPopup(popup)
-              .addTo(map),
-          )
-        }
-      } else {
-        for (let i = 0; i < LON_WRAPS.length; i++) {
-          const pos = shiftLatLng(live, LON_WRAPS[i])
-          layers.ship[i].setLatLng(pos)
-          layers.ship[i].setRadius(radius)
-          layers.ship[i].setPopupContent(popup)
-          layers.shipHalo[i].setLatLng(pos)
-          layers.shipHalo[i].setRadius(halo)
-        }
+      source.ship = {
+        latlng: live,
+        radius,
+        halo,
+        popup: `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
       }
 
+      // Keep wrap copies in sync with the viewport, then redraw live layers.
+      const nextWraps = wrapsForView()
+      if (!sameWraps(nextWraps, activeWraps)) {
+        activeWraps = nextWraps
+        rebuildHazards()
+      }
+      rebuildStaticMarkers()
+      rebuildPaths()
+      rebuildShip()
       applyCamera(false)
       map.invalidateSize()
     },
