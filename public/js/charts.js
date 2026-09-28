@@ -169,15 +169,32 @@ export function drawTelemetryCharts() {
   const altColor = cssVar('--ignition', '#e24a12')
   const spdColor = cssVar('--signal', '#0f7a5a')
   const maxAlt = Math.max(...samples.map((p) => p.alt))
-  const altInKm = maxAlt >= 2000
+  // Starbase pad elevation is ~90 m MSL. Until the ship has clearly left, plot 0 m.
+  const stillOnPad = maxAlt < 500
+  const altInKm = !stillOnPad && maxAlt >= 2000
+  const caption = altCanvas.closest('figure')?.querySelector('figcaption')
+  if (caption) {
+    caption.innerHTML = stillOnPad ? 'Altitude <span>0 m</span>' : 'Altitude'
+  }
+  altCanvas.setAttribute(
+    'aria-label',
+    stillOnPad ? 'Altitude over time, 0 m, still on the pad' : 'Altitude over time',
+  )
 
   drawChart(
     altCanvas,
-    samples.map((p) => ({ t: p.t, v: altInKm ? p.alt / 1000 : p.alt })),
+    samples.map((p) => ({
+      t: p.t,
+      v: stillOnPad ? 0 : altInKm ? p.alt / 1000 : p.alt,
+    })),
     {
       color: altColor,
-      yFloor: altInKm ? 1 : 100,
-      formatY: (v) => (altInKm ? `${Math.round(v)} km` : `${Math.round(v)} m`),
+      yFloor: stillOnPad ? 1 : altInKm ? 1 : 100,
+      formatY: (v) => {
+        if (stillOnPad) return v < 0.5 ? '0 m' : '1 m'
+        if (altInKm) return `${Math.round(v)} km`
+        return `${Math.round(v)} m`
+      },
     },
   )
 

@@ -459,14 +459,21 @@ function renderTelemetry(state) {
   document.querySelector('.telemetry-place').textContent = place
 
   const pad = getMeta().launchPad
-  const downrange = formatDownrange(
-    haversineKm(pad.lat, pad.lon, current.latitude, current.longitude),
+  const rangeKm = haversineKm(
+    pad.lat,
+    pad.lon,
+    current.latitude,
+    current.longitude,
   )
+  // Pad GPS sits a few metres off the surveyed point. Show that as still on the pad.
+  const onPad = Number.isFinite(rangeKm) && rangeKm < 0.15
+  const downrange = onPad ? '0 m' : formatDownrange(rangeKm)
+  const rangeNote = onPad ? 'on the pad' : 'from pad'
 
   const grid = document.querySelector('.telemetry-grid')
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
-    <div><dt>Downrange</dt><dd>${downrange} <span>from pad</span></dd></div>
+    <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
   `
   if (recordTelemetrySample(current) || !chartsPainted) {
     chartsPainted = true
