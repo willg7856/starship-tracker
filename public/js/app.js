@@ -1,4 +1,5 @@
 import { drawTelemetryCharts, recordTelemetrySample } from './charts.js'
+import { distanceAlongTrailKm, loadLiveTrail } from './trail.js'
 import { createMap } from './map.js'
 import { getMeta, loadTrack, setPlannedLiftoffMs } from './path.js'
 import { startTracker } from './tracker.js'
@@ -540,11 +541,19 @@ function renderTelemetry(state) {
   const onPad = Number.isFinite(rangeKm) && rangeKm < 0.15
   const downrange = onPad ? '0 m' : formatDownrange(rangeKm)
   const rangeNote = onPad ? 'on the pad' : 'from pad'
+  let traveledKm = 0
+  try {
+    traveledKm = distanceAlongTrailKm(loadLiveTrail())
+  } catch {
+    traveledKm = 0
+  }
+  const traveled = onPad ? '0 m' : formatDownrange(traveledKm)
 
   const grid = document.querySelector('.telemetry-grid')
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
     <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
+    <div><dt>Traveled</dt><dd>${traveled} <span>total</span></dd></div>
   `
   if (recordTelemetrySample(current) || !chartsPainted) {
     chartsPainted = true

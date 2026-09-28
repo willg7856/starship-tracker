@@ -215,17 +215,60 @@ function speedSeriesKmH() {
     .map((p) => ({ t: p.t, v: p.spd * 3.6 }))
 }
 
+/** Altitude over the flight, anchored at 0 at liftoff. */
+function altitudeSeries() {
+  const byTime = new Map()
+  for (const p of samples) {
+    if (Number.isFinite(p.t) && Number.isFinite(p.alt)) byTime.set(p.t, p.alt)
+  }
+  try {
+    for (const p of loadLiveTrail()) {
+      if (Number.isFinite(p.gps_time) && Number.isFinite(p.altitude)) {
+        byTime.set(p.gps_time, p.altitude)
+      }
+    }
+  } catch {
+    /* trail is optional */
+  }
+  const points = [...byTime.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([t, alt]) => ({ t, alt }))
+  const launch = liftoffGpsSeconds()
+  if (launch != null) {
+    // Pad samples from before T-0 sit left of the axis. The flight line starts at 0.
+    const flown = points.filter((p) => p.t >= launch - 1)
+    points.length = 0
+    points.push(...flown)
+    const first = points[0]
+    if (!first || first.t > launch + 1 || first.alt > 500) {
+      points.unshift({ t: launch, alt: 0 })
+    } else {
+      points[0] = { t: launch, alt: 0 }
+    }
+  } else if (points.length && points[0].alt !== 0) {
+    points.unshift({ t: points[0].t, alt: 0 })
+  }
+  return points
+}
+
 export function drawTelemetryCharts() {
   const altCanvas = document.querySelector('[data-chart="altitude"]')
   const spdCanvas = document.querySelector('[data-chart="speed"]')
   const speedPoints = speedSeriesKmH()
-  if (!altCanvas || !spdCanvas || (samples.length === 0 && speedPoints.length === 0)) return
+  const altPoints = altitudeSeries()
+  if (
+    !altCanvas ||
+    !spdCanvas ||
+    (altPoints.length === 0 && speedPoints.length === 0)
+  ) {
+    return
+  }
 
   const altColor = cssVar('--ignition', '#e24a12')
   const spdColor = cssVar('--signal', '#0f7a5a')
-  const maxAlt = Math.max(...samples.map((p) => p.alt))
+  const maxAlt = Math.max(0, ...altPoints.map((p) => p.alt))
   // Starbase pad elevation is ~90 m MSL. Until the ship has clearly left, plot 0 m.
-  const stillOnPad = maxAlt < 500
+  const stillOnPad = altPoints.length > 0 && maxAlt < 500
   const altInKm = !stillOnPad && maxAlt >= 2000
   const caption = altCanvas.closest('figure')?.querySelector('figcaption')
   if (caption) {
@@ -233,12 +276,13 @@ export function drawTelemetryCharts() {
   }
   altCanvas.setAttribute(
     'aria-label',
-    stillOnPad ? 'Altitude over time, 0 m, still on the pad' : 'Altitude over time',
+    stillOnPad ? 'Altitude over time, starting at 0 m' : 'Altitude over time, starting at 0',
   )
 
+  const liftoffGps = liftoffGpsSeconds()
   drawChart(
     altCanvas,
-    samples.map((p) => ({
+    altPoints.map((p) => ({
       t: p.t,
       v: stillOnPad ? 0 : altInKm ? p.alt / 1000 : p.alt,
     })),
@@ -250,10 +294,11 @@ export function drawTelemetryCharts() {
         if (altInKm) return `${Math.round(v)} km`
         return `${Math.round(v)} m`
       },
+      timeOrigin: liftoffGps,
+      domainStart: liftoffGps,
     },
   )
 
-  const liftoffGps = liftoffGpsSeconds()
   const firstSpeed = speedPoints[0]
   const coversFlight =
     liftoffGps != null &&
