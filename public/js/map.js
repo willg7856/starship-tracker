@@ -102,8 +102,14 @@ export function createMap(container, { prelaunch = false } = {}) {
   const map = L.map(container, {
     zoomControl: true,
     attributionControl: false,
-    worldCopyJump: true,
+    worldCopyJump: false,
+    maxBounds: [
+      [-85, -180],
+      [85, 180],
+    ],
+    maxBoundsViscosity: 1,
     maxZoom: 18,
+    minZoom: 2,
     zoomSnap: 0.1,
     zoomDelta: 0.5,
     scrollWheelZoom: true,
@@ -111,7 +117,10 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 18 },
+    { maxZoom: 18, noWrap: true, bounds: [
+      [-85, -180],
+      [85, 180],
+    ] },
   ).addTo(map)
 
   const launchIcon = L.divIcon({
