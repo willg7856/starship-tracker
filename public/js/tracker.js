@@ -4,6 +4,7 @@ import {
   estimateLastMoveGpsTime,
   loadLiveTrail,
   mergeTrailAhead,
+  altitudeZeroElapsedSeconds,
   pointsFromNoticesCoordinates,
   restElapsedSeconds,
   saveLiveTrail,
@@ -150,6 +151,7 @@ export function startTracker(onChange) {
     positionSource: null,
     liveTrail: loadLiveTrail(),
     landedElapsedSeconds: null,
+    altitudeZeroElapsedSeconds: null,
     spaceNoticesExtension: [],
     lastMovedAt: null,
   }
@@ -190,8 +192,11 @@ export function startTracker(onChange) {
     if (history.length < 2) return
     const mission = current.mission_time
     if (Number.isFinite(mission) && mission > 1 && mission < 20 * 3600) {
-      const rest = restElapsedSeconds(history, current.gps_time - mission)
+      const liftoffGps = current.gps_time - mission
+      const rest = restElapsedSeconds(history, liftoffGps)
       if (rest != null) state.landedElapsedSeconds = rest
+      const touched = altitudeZeroElapsedSeconds(history, liftoffGps)
+      if (touched != null) state.altitudeZeroElapsedSeconds = touched
     }
     const merged = mergeTrailAhead(history, state.liveTrail)
     state.liveTrail = merged

@@ -271,6 +271,23 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
 }
 
 /**
+ * Mission elapsed time when altitude first reads 0 after the ship has been
+ * flying. The pad already reads 0, so that does not count.
+ */
+export function altitudeZeroElapsedSeconds(points, liftoffGps) {
+  if (!Array.isArray(points) || !Number.isFinite(liftoffGps)) return null
+  let wasUp = false
+  for (let i = 0; i < points.length; i++) {
+    const alt = points[i].altitude
+    if (Number.isFinite(alt) && alt >= 500) wasUp = true
+    if (!wasUp || formatAltitudeKm(alt) !== '0') continue
+    const met = points[i].gps_time - liftoffGps
+    if (met > 30 && met < 20 * 3600) return met
+  }
+  return null
+}
+
+/**
  * Mission elapsed time when altitude and speed both first read as 0 after
  * the ship has been flying. Ignores the pad, where both readouts are already 0.
  */

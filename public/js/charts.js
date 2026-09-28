@@ -1,6 +1,13 @@
 import { loadLiveTrail } from './trail.js'
 import { getMeta } from './path.js'
-import { GPS_TO_UNIX_OFFSET, haversineKm, speedBetweenFixes } from './utils.js'
+import {
+  GPS_TO_UNIX_OFFSET,
+  formatAltitudeKm,
+  haversineKm,
+  speedBetweenFixes,
+} from './utils.js'
+
+const ALTITUDE_ZERO_KEY = 'bsz-flight14-altitude-zero-s'
 
 const HISTORY_KEY = 'bsz-ship41-telem-v1'
 const MAX_SAMPLES = 5000
@@ -270,7 +277,45 @@ function altitudeSeries() {
   } else if (points.length && points[0].alt !== 0) {
     points.unshift({ t: points[0].t, alt: 0 })
   }
-  return points
+  return endAltitudeAtLanding(points)
+}
+
+/** GPS time of the first post-liftoff altitude that reads 0, if landing is known. */
+function landingAltitudeGps() {
+  let met = null
+  try {
+    const n = Number(localStorage.getItem(ALTITUDE_ZERO_KEY))
+    if (Number.isFinite(n) && n > 30) met = n
+  } catch {
+    return null
+  }
+  const launch = liftoffGpsSeconds()
+  if (launch == null || met == null) return null
+  return launch + met
+}
+
+/**
+ * After splashdown the tracker keeps reporting 0. The graph ends at the first
+ * of those readings instead of growing a flat line.
+ */
+function endAltitudeAtLanding(points) {
+  const end = landingAltitudeGps()
+  if (end == null) {
+    let wasUp = false
+    for (let i = 0; i < points.length; i++) {
+      if (points[i].alt >= 500) wasUp = true
+      if (wasUp && formatAltitudeKm(points[i].alt) === '0') {
+        return points.slice(0, i + 1)
+      }
+    }
+    return points
+  }
+  const kept = points.filter((p) => p.t <= end + 1)
+  const last = kept[kept.length - 1]
+  if (!last || last.t < end - 1 || formatAltitudeKm(last.alt) !== '0') {
+    kept.push({ t: end, alt: 0 })
+  }
+  return kept
 }
 
 export function drawTelemetryCharts() {
