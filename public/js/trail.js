@@ -61,6 +61,44 @@ export function thinLatLonPath(points, minMoveM = MIN_MOVE_M) {
   return out
 }
 
+/** Path length through the recorded fixes, in kilometres. */
+export function distanceAlongTrailKm(points) {
+  if (!Array.isArray(points) || points.length < 2) return 0
+  let meters = 0
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]
+    const next = points[i]
+    const a = prev?.r_ecef
+    const b = next?.r_ecef
+    let segment = null
+    if (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length >= 3 &&
+      b.length >= 3 &&
+      [a[0], a[1], a[2], b[0], b[1], b[2]].every(Number.isFinite)
+    ) {
+      segment = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    } else if (
+      [prev?.latitude, prev?.longitude, next?.latitude, next?.longitude].every(
+        Number.isFinite,
+      )
+    ) {
+      const ground =
+        haversineKm(prev.latitude, prev.longitude, next.latitude, next.longitude) *
+        1000
+      const dAlt =
+        Number.isFinite(next.altitude) && Number.isFinite(prev.altitude)
+          ? next.altitude - prev.altitude
+          : 0
+      segment = Math.hypot(ground, dAlt)
+    }
+    if (!Number.isFinite(segment) || segment < 0 || segment > 3_000_000) continue
+    meters += segment
+  }
+  return meters / 1000
+}
+
 export function loadLiveTrail() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
