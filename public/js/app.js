@@ -32,6 +32,7 @@ const MOVE_ALT_M = 200
 const MOVE_SPEED_MS = 10
 const MOVE_RANGE_KM = 0.15
 const LIFTOFF_AT_KEY = 'bsz-flight14-liftoff-ms'
+const LANDED_ELAPSED_KEY = 'bsz-flight14-landed-elapsed-s'
 let chartsPainted = false
 let liftoffAtMs = readLiftoffAt()
 let liftoffConfirmed = liftoffAtMs != null
@@ -40,6 +41,39 @@ let moveStreak = 0
 let firstMoveAtMs = null
 let lastSampleKey = null
 let samplesSeen = 0
+let seenFlying = false
+let landedElapsedSeconds = readLandedElapsed()
+let clockStopped = false
+
+function readLandedElapsed() {
+  try {
+    const n = Number(localStorage.getItem(LANDED_ELAPSED_KEY))
+    return Number.isFinite(n) && n > 30 ? n : null
+  } catch {
+    return null
+  }
+}
+
+function rememberLandedElapsed(seconds, fromTrail) {
+  if (!(seconds > 30) || seconds > 20 * 3600) return
+  if (fromTrail) {
+    if (
+      landedElapsedSeconds != null &&
+      seconds >= landedElapsedSeconds - 0.5
+    ) {
+      return
+    }
+    landedElapsedSeconds = seconds
+    try {
+      localStorage.setItem(LANDED_ELAPSED_KEY, String(seconds))
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+  if (landedElapsedSeconds != null) return
+  landedElapsedSeconds = seconds
+}
 
 function readLiftoffAt() {
   try {
@@ -509,11 +543,63 @@ function holdingCountdown(state) {
 /**
  * Seconds from liftoff: negative before launch (T-), zero while held, positive after (T+).
  */
+function downrangeFromPadKm(current) {
+  if (!Number.isFinite(current?.latitude) || !Number.isFinite(current?.longitude)) {
+    return null
+  }
+  try {
+    const pad = getMeta().launchPad
+    return haversineKm(pad.lat, pad.lon, current.latitude, current.longitude)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * After liftoff, freeze T+ once the readouts are both 0. On the pad those
+ * readouts are already 0, so a ship still at Starbase does not stop the clock.
+ */
+function landedClockSeconds(state) {
+  const current = state?.ship?.current
+  if (!current) return null
+  if (
+    (Number.isFinite(current.altitude) && current.altitude >= 500) ||
+    (Number.isFinite(current.speed) && current.speed > 1)
+  ) {
+    seenFlying = true
+  }
+  const rangeKm = downrangeFromPadKm(current)
+  const atRest =
+    formatAltitudeKm(current.altitude) === '0' &&
+    formatSpeedKmh(current.speed) === '0' &&
+    Number.isFinite(rangeKm) &&
+    rangeKm >= 5
+  if (!atRest) return null
+  if (Number.isFinite(state.landedElapsedSeconds)) {
+    rememberLandedElapsed(state.landedElapsedSeconds, true)
+  } else if (
+    seenFlying &&
+    Number.isFinite(current.mission_time) &&
+    current.mission_time > 30
+  ) {
+    rememberLandedElapsed(current.mission_time, false)
+  }
+  return landedElapsedSeconds
+}
+
 function missionOffsetSeconds(state, nowMs) {
   observePad(state, nowMs)
+  clockStopped = false
   const official = officialLiftoffMs(state)
   if (official != null) {
     setActualLiftoffMs(official)
+  }
+  const landed = landedClockSeconds(state)
+  if (landed != null) {
+    clockStopped = true
+    return landed
+  }
+  if (official != null) {
     return Math.max(0, (nowMs - official) / 1000)
   }
   if (liftoffConfirmed && liftoffAtMs != null) {
@@ -539,13 +625,16 @@ function renderMissionClock(state, nowMs) {
   el.textContent = formatSignedMissionClock(offset ?? 0, launched ? 'T+' : 'T-')
   el.dataset.phase = launched ? 'flight' : 'prelaunch'
   el.dataset.hold = holding ? 'true' : 'false'
+  el.dataset.stopped = clockStopped ? 'true' : 'false'
   el.setAttribute(
     'aria-label',
-    launched
-      ? 'Mission elapsed time'
-      : holding
-        ? 'Holding at T-0 until Starship leaves the pad'
-        : 'Countdown to planned liftoff',
+    clockStopped
+      ? 'Mission elapsed time, stopped at landing'
+      : launched
+        ? 'Mission elapsed time'
+        : holding
+          ? 'Holding at T-0 until Starship leaves the pad'
+          : 'Countdown to planned liftoff',
   )
 }
 
