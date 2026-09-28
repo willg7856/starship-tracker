@@ -186,6 +186,10 @@ select {
   white-space: nowrap;
 }
 
+.since-landing[hidden] {
+  display: none;
+}
+
 .topbar-metric-label {
   font-family: var(--font-mono);
   font-size: 0.68rem;
