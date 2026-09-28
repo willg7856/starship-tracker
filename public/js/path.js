@@ -54,6 +54,9 @@ export async function loadTrack() {
     entryIndex: track.segments?.entry_index ?? 0,
     splashIndex: track.segments?.splashdown_index ?? 0,
     hasFlightPath: (track.points?.length ?? 0) >= 2,
+    noticePolygons: Array.isArray(track.noticePolygons)
+      ? track.noticePolygons
+      : [],
   }
   return meta
 }
@@ -65,6 +68,10 @@ export function getMeta() {
 
 export function getFlightTrack() {
   return track.points || []
+}
+
+export function getNoticePolygons() {
+  return getMeta().noticePolygons || []
 }
 
 export function splitPathByDistanceGap(points, maxGapKm = MAX_DRIFT_GAP_KM) {

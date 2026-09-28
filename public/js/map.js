@@ -1,6 +1,7 @@
 import {
   buildFlightPath,
   getMeta,
+  getNoticePolygons,
   splitPathByDistanceGap,
 } from './path.js'
 import { thinLatLonPath } from './trail.js'
@@ -9,12 +10,55 @@ import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 const MAX_BRIDGE_KM = 1
 const FOLLOW_ZOOM = 8
 
+function hazardStyle(notice) {
+  const text = `${notice.name || ''} ${notice.type || ''}`.toUpperCase()
+  const isReentry =
+    text.includes('RE-ENTRY') ||
+    text.includes('REENTRY') ||
+    text.includes('SPLASHDOWN') ||
+    text.includes('RETURN') ||
+    text.includes('DEORBIT')
+  if (isReentry) {
+    return {
+      color: '#b45309',
+      fillColor: '#e0a045',
+      fillOpacity: 0.16,
+      weight: 1.25,
+      opacity: 0.75,
+    }
+  }
+  return {
+    color: '#c2410c',
+    fillColor: '#ff5a1f',
+    fillOpacity: 0.14,
+    weight: 1.25,
+    opacity: 0.7,
+  }
+}
+
+/** Keep rings continuous across the antimeridian for Leaflet. */
+function unwrapRing(ring) {
+  if (!Array.isArray(ring) || ring.length < 2) return ring
+  const out = [[ring[0][0], ring[0][1]]]
+  for (let i = 1; i < ring.length; i++) {
+    const lat = ring[i][0]
+    let lon = ring[i][1]
+    const prev = out[out.length - 1][1]
+    while (lon - prev > 180) lon -= 360
+    while (lon - prev < -180) lon += 360
+    out.push([lat, lon])
+  }
+  return out
+}
+
 export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
+  const notices = getNoticePolygons()
   let mode = prelaunch || !meta.hasFlightPath ? 'flight' : 'drift'
   /** @type {'follow' | 'wide' | 'auto'} */
   let camera = prelaunch ? 'wide' : 'follow'
+  let showHazards = true
   let fittedCamera = null
   let fittedMode = null
   let latestLive = null
@@ -25,6 +69,7 @@ export function createMap(container, { prelaunch = false } = {}) {
     ascent: null,
     reentry: null,
     drift: [],
+    hazards: [],
     live: null,
     ship: null,
     shipHalo: null,
@@ -102,6 +147,33 @@ export function createMap(container, { prelaunch = false } = {}) {
       .addTo(map)
   }
 
+  function clearHazardLayers() {
+    for (const layer of layers.hazards) map.removeLayer(layer)
+    layers.hazards = []
+  }
+
+  function renderHazards() {
+    clearHazardLayers()
+    if (!showHazards) return
+    for (const notice of notices) {
+      const rings = notice.polygons || []
+      for (const ring of rings) {
+        if (!Array.isArray(ring) || ring.length < 3) continue
+        const style = hazardStyle(notice)
+        const poly = L.polygon(ring, style)
+        const title = notice.name || notice.id || 'Hazard zone'
+        const kind = notice.type ? ` <span>${notice.type}</span>` : ''
+        poly.bindPopup(
+          `<strong>Hazard zone</strong>${kind}<br>${title.replace(/</g, '&lt;')}`,
+        )
+        poly.addTo(map)
+        layers.hazards.push(poly)
+      }
+    }
+  }
+
+  renderHazards()
+
   const shell = container.closest('.map-shell') || container.parentElement
 
   let toggleEl = shell?.querySelector('.map-view-toggle')
@@ -136,9 +208,22 @@ export function createMap(container, { prelaunch = false } = {}) {
     cameraEl.setAttribute('aria-label', 'Map camera')
     cameraEl.innerHTML =
       '<button type="button" data-camera="follow">Follow</button>' +
-      '<button type="button" data-camera="wide">Wide</button>'
+      '<button type="button" data-camera="wide">Wide</button>' +
+      '<button type="button" data-hazards="toggle" class="active" aria-pressed="true">Hazards</button>'
     shell.append(cameraEl)
     cameraEl.addEventListener('click', (e) => {
+      const hazardBtn = e.target.closest('button[data-hazards]')
+      if (hazardBtn) {
+        showHazards = !showHazards
+        hazardBtn.classList.toggle('active', showHazards)
+        hazardBtn.setAttribute('aria-pressed', String(showHazards))
+        renderHazards()
+        if (camera === 'wide') {
+          fittedCamera = null
+          applyCamera(true)
+        }
+        return
+      }
       const btn = e.target.closest('button[data-camera]')
       if (!btn) return
       setCamera(btn.dataset.camera, true)
@@ -170,6 +255,21 @@ export function createMap(container, { prelaunch = false } = {}) {
     for (const p of latestFullPath) points.push(p)
     for (const p of latestDriftFrame) points.push(p)
     if (latestLive) points.push(latestLive)
+    if (showHazards) {
+      for (const notice of notices) {
+        for (const ring of notice.polygons || []) {
+          for (const pt of ring) {
+            if (
+              Array.isArray(pt) &&
+              Number.isFinite(pt[0]) &&
+              Number.isFinite(pt[1])
+            ) {
+              points.push(pt)
+            }
+          }
+        }
+      }
+    }
     if (points.length < 2) {
       return L.latLngBounds(
         points[0] || initialCenter,
