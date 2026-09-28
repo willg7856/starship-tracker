@@ -18,21 +18,22 @@ function hazardStyle(notice) {
     text.includes('SPLASHDOWN') ||
     text.includes('RETURN') ||
     text.includes('DEORBIT')
+  // Merged unions use a single outline — no internal section borders.
   if (isReentry) {
     return {
       color: '#b45309',
       fillColor: '#e0a045',
-      fillOpacity: 0.16,
-      weight: 1.25,
-      opacity: 0.75,
+      fillOpacity: 0.18,
+      weight: 1,
+      opacity: 0.7,
     }
   }
   return {
     color: '#c2410c',
     fillColor: '#ff5a1f',
-    fillOpacity: 0.14,
-    weight: 1.25,
-    opacity: 0.7,
+    fillOpacity: 0.16,
+    weight: 1,
+    opacity: 0.65,
   }
 }
 
