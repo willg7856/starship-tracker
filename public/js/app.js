@@ -235,6 +235,14 @@ function renderStatus(state, nowMs) {
   if (state.error) {
     label = 'Offline'
     dataState = 'error'
+  } else if (!state.loading && state.positionSource === 'spacex' && state.ship?.current) {
+    const ageS = Math.max(
+      0,
+      Math.floor((nowMs - (state.fetchedAt?.getTime?.() ?? nowMs)) / 1000),
+    )
+    label =
+      ageS < 20 ? 'Live from SpaceX' : `Live from SpaceX · ${formatUpdateAge(ageS)}`
+    dataState = 'live'
   } else if (!state.loading && state.lastMovedAt) {
     label = `Updated ${formatUpdateAge(
       Math.max(0, Math.floor((nowMs - state.lastMovedAt.getTime()) / 1000)),
