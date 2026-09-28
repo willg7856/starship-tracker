@@ -9,6 +9,8 @@ import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const MAX_BRIDGE_KM = 1
 const FOLLOW_ZOOM = 8
+/** Draw overlays on neighboring world copies so wrapping maps stay populated. */
+const LON_WRAPS = [-360, 0, 360]
 
 function hazardStyle(notice) {
   const text = `${notice.name || ''} ${notice.type || ''}`.toUpperCase()
@@ -51,6 +53,19 @@ function unwrapRing(ring) {
   return out
 }
 
+function shiftLatLng(latlng, lonOffset) {
+  return [latlng[0], latlng[1] + lonOffset]
+}
+
+function shiftLatLngs(points, lonOffset) {
+  return points.map((p) => shiftLatLng(p, lonOffset))
+}
+
+function clearLayerList(map, list) {
+  for (const layer of list) map.removeLayer(layer)
+  list.length = 0
+}
+
 export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
@@ -66,16 +81,16 @@ export function createMap(container, { prelaunch = false } = {}) {
   let latestDriftFrame = []
   let userInteracting = false
   let layers = {
-    ascent: null,
-    reentry: null,
+    ascent: [],
+    reentry: [],
     drift: [],
     hazards: [],
-    live: null,
-    ship: null,
-    shipHalo: null,
-    launch: null,
-    landing: null,
-    plannedLanding: null,
+    live: [],
+    ship: [],
+    shipHalo: [],
+    launch: [],
+    landing: [],
+    plannedLanding: [],
   }
 
   const initialCenter = prelaunch
@@ -112,44 +127,75 @@ export function createMap(container, { prelaunch = false } = {}) {
     iconAnchor: [7, 7],
   })
 
-  layers.launch = L.marker([meta.launchPad.lat, meta.launchPad.lon], {
-    icon: launchIcon,
-  })
-    .bindPopup(`<strong>Liftoff</strong><br>${meta.launchPad.label}`)
-    .addTo(map)
+  function addWrappedMarkers(latlng, icon, popupHtml, bucket) {
+    for (const offset of LON_WRAPS) {
+      const marker = L.marker(shiftLatLng(latlng, offset), { icon })
+        .bindPopup(popupHtml)
+        .addTo(map)
+      bucket.push(marker)
+    }
+  }
+
+  function addWrappedPolyline(points, style, bucket) {
+    if (!points || points.length < 2) return
+    const unwrapped = unwrapRing(points)
+    for (const offset of LON_WRAPS) {
+      const layer = L.polyline(shiftLatLngs(unwrapped, offset), style).addTo(map)
+      bucket.push(layer)
+    }
+  }
+
+  function addWrappedPolygon(ring, style, popupHtml, bucket) {
+    if (!ring || ring.length < 3) return
+    const unwrapped = unwrapRing(ring)
+    for (const offset of LON_WRAPS) {
+      const layer = L.polygon(shiftLatLngs(unwrapped, offset), style)
+      if (popupHtml) layer.bindPopup(popupHtml)
+      layer.addTo(map)
+      bucket.push(layer)
+    }
+  }
+
+  function setWrappedStyle(bucket, style) {
+    for (const layer of bucket) layer.setStyle(style)
+  }
+
+  addWrappedMarkers(
+    [meta.launchPad.lat, meta.launchPad.lon],
+    launchIcon,
+    `<strong>Liftoff</strong><br>${meta.launchPad.label}`,
+    layers.launch,
+  )
 
   if (paths.ascent.length >= 2) {
-    layers.ascent = L.polyline(paths.ascent, {
-      color: '#ff5a1f',
-      weight: 3,
-      opacity: 0.95,
-    }).addTo(map)
+    addWrappedPolyline(
+      paths.ascent,
+      { color: '#ff5a1f', weight: 3, opacity: 0.95 },
+      layers.ascent,
+    )
   }
   if (paths.reentry.length >= 2) {
-    layers.reentry = L.polyline(paths.reentry, {
-      color: '#e64613',
-      weight: 3,
-      opacity: 0.95,
-    }).addTo(map)
+    addWrappedPolyline(
+      paths.reentry,
+      { color: '#e64613', weight: 3, opacity: 0.95 },
+      layers.reentry,
+    )
   }
 
   if (prelaunch && meta.landingFix) {
-    layers.plannedLanding = L.marker(
+    addWrappedMarkers(
       [meta.landingFix.lat, meta.landingFix.lon],
-      { icon: landingIcon },
+      landingIcon,
+      `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
+        meta.landingFix.lat,
+        meta.landingFix.lon,
+      )}`,
+      layers.plannedLanding,
     )
-      .bindPopup(
-        `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
-          meta.landingFix.lat,
-          meta.landingFix.lon,
-        )}`,
-      )
-      .addTo(map)
   }
 
   function clearHazardLayers() {
-    for (const layer of layers.hazards) map.removeLayer(layer)
-    layers.hazards = []
+    clearLayerList(map, layers.hazards)
   }
 
   function renderHazards() {
@@ -157,17 +203,12 @@ export function createMap(container, { prelaunch = false } = {}) {
     if (!showHazards) return
     for (const notice of notices) {
       const rings = notice.polygons || []
+      const title = notice.name || notice.id || 'Hazard zone'
+      const kind = notice.type ? ` <span>${notice.type}</span>` : ''
+      const popup = `<strong>Hazard zone</strong>${kind}<br>${title.replace(/</g, '&lt;')}`
+      const style = hazardStyle(notice)
       for (const ring of rings) {
-        if (!Array.isArray(ring) || ring.length < 3) continue
-        const style = hazardStyle(notice)
-        const poly = L.polygon(ring, style)
-        const title = notice.name || notice.id || 'Hazard zone'
-        const kind = notice.type ? ` <span>${notice.type}</span>` : ''
-        poly.bindPopup(
-          `<strong>Hazard zone</strong>${kind}<br>${title.replace(/</g, '&lt;')}`,
-        )
-        poly.addTo(map)
-        layers.hazards.push(poly)
+        addWrappedPolygon(ring, style, popup, layers.hazards)
       }
     }
   }
@@ -258,7 +299,7 @@ export function createMap(container, { prelaunch = false } = {}) {
     if (showHazards) {
       for (const notice of notices) {
         for (const ring of notice.polygons || []) {
-          for (const pt of ring) {
+          for (const pt of unwrapRing(ring)) {
             if (
               Array.isArray(pt) &&
               Number.isFinite(pt[0]) &&
@@ -305,7 +346,6 @@ export function createMap(container, { prelaunch = false } = {}) {
       return
     }
 
-    // auto: legacy drift/flight framing
     const view = mode
     if (!force && fittedMode === view) return
     fittedMode = view
@@ -354,12 +394,8 @@ export function createMap(container, { prelaunch = false } = {}) {
   })
 
   function clearDriftLayers() {
-    for (const layer of layers.drift) map.removeLayer(layer)
-    layers.drift = []
-    if (layers.live) {
-      map.removeLayer(layers.live)
-      layers.live = null
-    }
+    clearLayerList(map, layers.drift)
+    clearLayerList(map, layers.live)
   }
 
   return {
@@ -369,9 +405,8 @@ export function createMap(container, { prelaunch = false } = {}) {
         return
       }
 
-      if (layers.plannedLanding) {
-        map.removeLayer(layers.plannedLanding)
-        layers.plannedLanding = null
+      if (layers.plannedLanding.length) {
+        clearLayerList(map, layers.plannedLanding)
       }
 
       const current = ship.current
@@ -382,7 +417,6 @@ export function createMap(container, { prelaunch = false } = {}) {
 
       if (toggleEl) toggleEl.hidden = !(landed && meta.hasFlightPath)
 
-      // Prefer Follow during ascent/flight; keep Wide if user chose it.
       if (camera === 'auto' && !landed) {
         camera = 'follow'
         syncCameraButtons()
@@ -459,21 +493,24 @@ export function createMap(container, { prelaunch = false } = {}) {
       clearDriftLayers()
       for (const segment of oceanDriftCleanSegments) {
         if (segment.length < 2) continue
-        const layer = L.polyline(segment, {
-          color: '#ffc400',
-          weight: view === 'drift' ? 4 : 2.5,
-          opacity: 0.95,
-        }).addTo(map)
-        layers.drift.push(layer)
+        addWrappedPolyline(
+          segment,
+          {
+            color: '#ffc400',
+            weight: view === 'drift' ? 4 : 2.5,
+            opacity: 0.95,
+          },
+          layers.drift,
+        )
       }
 
       if (!meta.hasFlightPath && fullPath.length >= 2) {
-        if (layers.ascent) map.removeLayer(layers.ascent)
-        layers.ascent = L.polyline(fullPath, {
-          color: '#ff5a1f',
-          weight: 3,
-          opacity: 0.95,
-        }).addTo(map)
+        clearLayerList(map, layers.ascent)
+        addWrappedPolyline(
+          fullPath,
+          { color: '#ff5a1f', weight: 3, opacity: 0.95 },
+          layers.ascent,
+        )
       }
 
       if (landed && livePath.length) {
@@ -502,70 +539,78 @@ export function createMap(container, { prelaunch = false } = {}) {
           pts = pts.length >= 2 ? thinLatLonPath(pts) : null
         }
         if (pts) {
-          layers.live = L.polyline(pts, {
-            color: '#ffc400',
-            weight: view === 'drift' ? 4 : 2.5,
-            opacity: 0.95,
-          }).addTo(map)
+          addWrappedPolyline(
+            pts,
+            {
+              color: '#ffc400',
+              weight: view === 'drift' ? 4 : 2.5,
+              opacity: 0.95,
+            },
+            layers.live,
+          )
         }
       }
 
-      if (layers.ascent) {
-        layers.ascent.setStyle({ opacity: view === 'flight' ? 0.95 : 0.55 })
-      }
-      if (layers.reentry) {
-        layers.reentry.setStyle({ opacity: view === 'flight' ? 0.95 : 0.55 })
-      }
+      setWrappedStyle(layers.ascent, {
+        opacity: view === 'flight' ? 0.95 : 0.55,
+      })
+      setWrappedStyle(layers.reentry, {
+        opacity: view === 'flight' ? 0.95 : 0.55,
+      })
 
       if (landed && meta.landingFix) {
-        if (!layers.landing) {
-          layers.landing = L.marker(
+        if (!layers.landing.length) {
+          addWrappedMarkers(
             [meta.landingFix.lat, meta.landingFix.lon],
-            { icon: landingIcon },
+            landingIcon,
+            `<strong>Splashdown</strong><br>${formatLatLon(
+              meta.landingFix.lat,
+              meta.landingFix.lon,
+            )}`,
+            layers.landing,
           )
-            .bindPopup(
-              `<strong>Splashdown</strong><br>${formatLatLon(
-                meta.landingFix.lat,
-                meta.landingFix.lon,
-              )}`,
-            )
-            .addTo(map)
         }
-      } else if (layers.landing) {
-        map.removeLayer(layers.landing)
-        layers.landing = null
+      } else if (layers.landing.length) {
+        clearLayerList(map, layers.landing)
       }
 
       const radius = view === 'drift' ? 11 : 9
       const halo = view === 'drift' ? 22 : 18
       const shipLabel = meta.vehicle || 'Ship 41'
-      if (!layers.ship) {
-        layers.shipHalo = L.circleMarker(live, {
-          radius: halo,
-          color: '#ff5a1f',
-          fillOpacity: 0,
-          weight: 1,
-          opacity: 0.45,
-        }).addTo(map)
-        layers.ship = L.circleMarker(live, {
-          radius,
-          color: '#ff5a1f',
-          fillColor: '#ff5a1f',
-          fillOpacity: 0.95,
-          weight: 2,
-        })
-          .bindPopup(
-            `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
+      const popup = `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`
+      if (!layers.ship.length) {
+        for (const offset of LON_WRAPS) {
+          const pos = shiftLatLng(live, offset)
+          layers.shipHalo.push(
+            L.circleMarker(pos, {
+              radius: halo,
+              color: '#ff5a1f',
+              fillOpacity: 0,
+              weight: 1,
+              opacity: 0.45,
+            }).addTo(map),
           )
-          .addTo(map)
+          layers.ship.push(
+            L.circleMarker(pos, {
+              radius,
+              color: '#ff5a1f',
+              fillColor: '#ff5a1f',
+              fillOpacity: 0.95,
+              weight: 2,
+            })
+              .bindPopup(popup)
+              .addTo(map),
+          )
+        }
       } else {
-        layers.ship.setLatLng(live)
-        layers.ship.setRadius(radius)
-        layers.ship.setPopupContent(
-          `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
-        )
-        layers.shipHalo.setLatLng(live)
-        layers.shipHalo.setRadius(halo)
+        for (let i = 0; i < LON_WRAPS.length; i++) {
+          const pos = shiftLatLng(live, LON_WRAPS[i])
+          layers.ship[i].setLatLng(pos)
+          layers.ship[i].setRadius(radius)
+          layers.ship[i].setPopupContent(popup)
+          layers.shipHalo[i].setLatLng(pos)
+          layers.shipHalo[i].setRadius(halo)
+        }
       }
 
       applyCamera(false)
