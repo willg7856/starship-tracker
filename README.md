@@ -1,4 +1,4 @@
-# Ship 41 Tracker
+# Starship Tracker
 
 Vanilla JS tracker for SpaceX Starship Flight 14 / Ship 41.
 

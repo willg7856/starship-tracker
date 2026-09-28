@@ -15,6 +15,13 @@ export async function loadTrack() {
     vehicle: track.vehicle || 'Ship 41',
     flight: track.flight || 14,
     phase: track.phase || 'prelaunch',
+    plannedLiftoffMs: (() => {
+      if (typeof track.plannedLiftoff === 'string') {
+        const ms = Date.parse(track.plannedLiftoff)
+        return Number.isFinite(ms) ? ms : null
+      }
+      return null
+    })(),
     launchPad: {
       lat: first?.lat ?? 25.99684,
       lon: first?.lon ?? -97.15804,
