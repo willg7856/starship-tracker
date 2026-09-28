@@ -215,12 +215,11 @@ export function createMap(container, { prelaunch = false } = {}) {
     clearLayerList(map, layers.hazards)
     if (!showHazards) return
     for (const notice of notices) {
-      const title = notice.name || notice.id || 'Hazard zone'
-      const kind = notice.type ? ` <span>${notice.type}</span>` : ''
-      const popup = `<strong>Hazard zone</strong>${kind}<br>${title.replace(/</g, '&lt;')}`
+      // No click popup: notice titles are truncated NOTAM/LNM jargon and
+      // add little beyond the visual hazard fill itself.
       const style = hazardStyle(notice)
       for (const ring of notice.polygons || []) {
-        addPolygonCopies(ring, style, popup, layers.hazards)
+        addPolygonCopies(ring, style, null, layers.hazards)
       }
     }
   }
