@@ -384,45 +384,6 @@ select {
   gap: 0;
 }
 
-.map-view-toggle {
-  position: absolute;
-  z-index: 500;
-  top: 0.85rem;
-  left: 0.85rem;
-  display: inline-flex;
-  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
-  background: var(--toggle-bg);
-  backdrop-filter: blur(6px);
-}
-
-.map-view-toggle[hidden] {
-  display: none !important;
-}
-
-.map-view-toggle button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 0.55rem 0.8rem;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.map-view-toggle button:hover {
-  color: var(--ink);
-  background: rgba(18, 20, 26, 0.04);
-}
-
-.map-view-toggle button.active {
-  background: var(--ink);
-  color: var(--paper-raised);
-}
-
 .map-camera-controls {
   position: absolute;
   z-index: 500;
@@ -592,9 +553,6 @@ select {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .telemetry-grid.with-drift {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 .telemetry-grid > div {
@@ -622,7 +580,6 @@ select {
   }
 
   .telemetry-grid > div:nth-child(4n),
-  .telemetry-grid.with-drift > div:nth-child(3n),
   .telemetry-grid > div:nth-child(3n) {
     border-right: 0;
     padding-right: 0;
@@ -632,9 +589,7 @@ select {
   .telemetry-grid > div:nth-child(4n + 3),
   .telemetry-grid > div:nth-child(4n + 4),
   .telemetry-grid > div:nth-child(3n + 2),
-  .telemetry-grid > div:nth-child(3n + 3),
-  .telemetry-grid.with-drift > div:nth-child(3n + 2),
-  .telemetry-grid.with-drift > div:nth-child(3n + 3) {
+  .telemetry-grid > div:nth-child(3n + 3) {
     padding-left: 1.1rem;
   }
 }
@@ -670,9 +625,6 @@ select {
   color: var(--muted-2);
 }
 
-.telemetry-grid.with-drift > div:nth-last-child(-n + 2) dd {
-  color: var(--ignition);
-}
 
 .footer {
   margin-top: auto;
@@ -732,10 +684,6 @@ select {
     align-items: flex-start;
   }
 
-  .map-view-toggle {
-    top: 0.7rem;
-    left: 0.7rem;
-  }
 
   .map-camera-controls {
     top: 0.7rem;

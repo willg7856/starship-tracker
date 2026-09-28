@@ -3,24 +3,20 @@ import { getMeta, loadTrack } from './path.js'
 import { startTracker } from './tracker.js'
 import {
   SPACEX_VEHICLE_TRACKER,
-  bearingDegrees,
   describeLocation,
   formatAltitudeKm,
-  formatBearingCardinal,
-  formatDriftDistance,
-  formatDriftDuration,
   formatLatLon,
   formatSignedMissionClock,
   formatSpeedKmh,
   formatUpdateAge,
   gpsTimeToDate,
-  haversineKm,
-  isNearSurface,
 } from './utils.js'
 
 const THEME_KEY = 'bsz-theme'
-/** Mission time above this means liftoff is confirmed from telemetry. */
-const LIFTOFF_MISSION_S = 2
+/** Clear of the pad + climbing — SpaceX often ticks mission_time on the pad. */
+const LIFTOFF_ALT_M = 1500
+const LIFTOFF_SPEED_MS = 80
+const PAD_RADIUS_DEG = 0.08
 
 function getTheme() {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -141,23 +137,38 @@ function liveMissionTime(state, nowMs) {
   return current.mission_time + elapsedS
 }
 
-function hasLiftoff(state, mission) {
-  if (!state?.ship?.current) return false
-  if (Number.isFinite(mission) && mission >= LIFTOFF_MISSION_S) return true
-  const alt = state.ship.current.altitude
-  const speed = state.ship.current.speed
+function isNearPad(lat, lon) {
+  const pad = getMeta().launchPad
   return (
-    (Number.isFinite(alt) && alt > 500) ||
-    (Number.isFinite(speed) && speed > 20)
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    Math.abs(lat - pad.lat) < PAD_RADIUS_DEG &&
+    Math.abs(lon - pad.lon) < PAD_RADIUS_DEG
   )
+}
+
+/**
+ * True only once the vehicle has clearly left the pad. Pad telemetry often
+ * publishes a ticking mission_time / low altitude before Flight 14 liftoff.
+ */
+function hasLiftoff(state) {
+  if (!state?.ship?.current) return false
+  const { altitude, speed, latitude, longitude } = state.ship.current
+  const onPad = isNearPad(latitude, longitude)
+  if (onPad && !(Number.isFinite(altitude) && altitude > LIFTOFF_ALT_M)) {
+    return false
+  }
+  if (Number.isFinite(altitude) && altitude > LIFTOFF_ALT_M) return true
+  if (Number.isFinite(speed) && speed > LIFTOFF_SPEED_MS) return true
+  return false
 }
 
 /**
  * Seconds from liftoff: negative before launch (T-), positive after (T+).
  */
 function missionOffsetSeconds(state, nowMs) {
-  const mission = liveMissionTime(state, nowMs)
-  if (hasLiftoff(state, mission)) {
+  if (hasLiftoff(state)) {
+    const mission = liveMissionTime(state, nowMs)
     return Math.max(0, mission ?? 0)
   }
   const planned = getMeta().plannedLiftoffMs
@@ -170,7 +181,7 @@ function renderMissionClock(state, nowMs) {
   const el = document.querySelector('.mission-clock')
   if (!el) return
   const offset = missionOffsetSeconds(state, nowMs)
-  const launched = hasLiftoff(state, liveMissionTime(state, nowMs))
+  const launched = hasLiftoff(state)
   el.textContent = formatSignedMissionClock(offset ?? 0)
   el.dataset.phase = launched ? 'flight' : 'prelaunch'
   el.setAttribute(
@@ -196,7 +207,7 @@ function renderLiveReadouts(state) {
   if (strip) strip.dataset.state = 'live'
 }
 
-function renderTelemetry(state, nowMs) {
+function renderTelemetry(state) {
   const section = document.querySelector('.telemetry')
   const current = state.ship?.current
   if (!current) {
@@ -204,7 +215,6 @@ function renderTelemetry(state, nowMs) {
     return
   }
   section.hidden = false
-  const mission = liveMissionTime(state, nowMs)
   const place = describeLocation(
     current.latitude,
     current.longitude,
@@ -212,45 +222,9 @@ function renderTelemetry(state, nowMs) {
   )
   document.querySelector('.telemetry-place').textContent = place
 
-  let drift = null
-  const meta = getMeta()
-  if (
-    mission != null &&
-    isNearSurface(current.altitude) &&
-    meta.landingFix &&
-    typeof meta.splashdownMissionTime === 'number'
-  ) {
-    const km = haversineKm(
-      meta.landingFix.lat,
-      meta.landingFix.lon,
-      current.latitude,
-      current.longitude,
-    )
-    const bearing = bearingDegrees(
-      meta.landingFix.lat,
-      meta.landingFix.lon,
-      current.latitude,
-      current.longitude,
-    )
-    drift = {
-      label: formatDriftDistance(km),
-      direction: km < 0.05 ? 'at splashdown' : formatBearingCardinal(bearing),
-      duration: formatDriftDuration(
-        Math.max(0, mission - meta.splashdownMissionTime),
-      ),
-    }
-  }
-
   const grid = document.querySelector('.telemetry-grid')
-  grid.classList.toggle('with-drift', Boolean(drift))
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
-    ${
-      drift
-        ? `<div><dt>Ocean drift</dt><dd>${drift.label} <span>${drift.direction}</span></dd></div>
-           <div><dt>Time drifting</dt><dd>${drift.duration} <span>since splashdown</span></dd></div>`
-        : ''
-    }
   `
 }
 
@@ -309,7 +283,7 @@ async function main() {
     renderMissionClock(state, nowMs)
     renderLiveReadouts(state)
     renderStatus(state, nowMs)
-    renderTelemetry(state, nowMs)
+    renderTelemetry(state)
   }
 
   tick(latest)
