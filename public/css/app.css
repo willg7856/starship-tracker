@@ -336,6 +336,7 @@ select {
   border-bottom-color: color-mix(in srgb, var(--ignition) 55%, transparent);
 }
 
+.watch-toggle,
 .theme-toggle {
   appearance: none;
   display: inline-flex;
@@ -354,19 +355,24 @@ select {
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
+.watch-toggle:hover,
 .theme-toggle:hover {
   border-color: var(--ink-soft);
   background: var(--paper);
   color: var(--ignition);
 }
 
+.watch-toggle:focus-visible,
 .theme-toggle:focus-visible {
   outline: 2px solid var(--ignition);
   outline-offset: 2px;
 }
 
-.theme-toggle[aria-pressed='true'] {
+.theme-toggle[aria-pressed='true'],
+.watch-toggle.active {
   border-color: var(--ink-soft);
+  background: var(--ink);
+  color: var(--paper-raised);
 }
 
 @keyframes masthead-in {
@@ -378,6 +384,83 @@ select {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.livestream {
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.livestream[hidden] {
+  display: none !important;
+}
+
+.livestream-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0.9rem var(--masthead-pad-x) 1.1rem;
+}
+
+.livestream-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.livestream-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.livestream-head p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.livestream-head a {
+  color: var(--ink-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
+}
+
+.livestream-head a:hover {
+  color: var(--ignition);
+}
+
+.livestream-close {
+  appearance: none;
+  flex-shrink: 0;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.livestream-frame {
+  position: relative;
+  width: min(100%, 960px);
+  aspect-ratio: 16 / 9;
+  background: #0c0e12;
+}
+
+.livestream-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .map-section {

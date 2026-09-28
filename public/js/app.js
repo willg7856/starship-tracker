@@ -13,6 +13,11 @@ import {
 } from './utils.js'
 
 const THEME_KEY = 'bsz-theme'
+const SPACEX_WEBCAST =
+  'https://www.spacex.com/launches/starship-flight-14'
+/** Space.com simulcast of the SpaceX Flight 14 webcast. Official player cannot be embedded. */
+const LIVESTREAM_EMBED =
+  'https://www.youtube-nocookie.com/embed/CxHNK4UeVP4?rel=0&modestbranding=1'
 /** Clear of the pad + climbing — SpaceX often ticks mission_time on the pad. */
 const LIFTOFF_ALT_M = 1500
 const LIFTOFF_SPEED_MS = 80
@@ -62,6 +67,9 @@ function renderShell(root) {
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
             <p class="status-line" data-state="loading">Linking…</p>
             <div class="masthead-actions">
+              <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
+                Watch
+              </button>
               <button type="button" class="theme-toggle">Dark</button>
               <a class="masthead-link" href="${SPACEX_VEHICLE_TRACKER}" target="_blank" rel="noreferrer">
                 SpaceX tracker
@@ -80,6 +88,29 @@ function renderShell(root) {
           <div class="live-readout">
             <span class="live-readout-label">Speed</span>
             <span class="live-readout-value" data-live="speed">— <span>km/h</span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="livestream" id="livestream" aria-label="Flight 14 livestream" hidden>
+        <div class="livestream-inner">
+          <div class="livestream-head">
+            <div>
+              <h2>Livestream</h2>
+              <p>
+                Space.com simulcast of the SpaceX webcast.
+                <a href="${SPACEX_WEBCAST}" target="_blank" rel="noreferrer">Watch on SpaceX</a>
+              </p>
+            </div>
+            <button type="button" class="livestream-close">Close</button>
+          </div>
+          <div class="livestream-frame">
+            <iframe
+              title="Starship Flight 14 livestream"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+            ></iframe>
           </div>
         </div>
       </section>
@@ -116,6 +147,25 @@ function renderShell(root) {
     setTheme(getTheme() === 'dark' ? 'light' : 'dark')
   })
   setTheme(getTheme())
+
+  const watchBtn = document.querySelector('.watch-toggle')
+  const livestream = document.querySelector('.livestream')
+  const livestreamFrame = livestream.querySelector('iframe')
+  const setLivestreamOpen = (open) => {
+    livestream.hidden = !open
+    watchBtn.setAttribute('aria-expanded', String(open))
+    watchBtn.classList.toggle('active', open)
+    if (open && !livestreamFrame.src) {
+      livestreamFrame.src = LIVESTREAM_EMBED
+    }
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+  }
+  watchBtn.addEventListener('click', () => {
+    setLivestreamOpen(livestream.hidden)
+  })
+  livestream.querySelector('.livestream-close').addEventListener('click', () => {
+    setLivestreamOpen(false)
+  })
 }
 
 function liveMissionTime(state, nowMs) {
