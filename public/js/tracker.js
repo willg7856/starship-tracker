@@ -7,7 +7,7 @@ import {
 } from './trail.js'
 import { gpsTimeToDate } from './utils.js'
 
-const POLL_MS = 10_000
+const POLL_MS = 5_000
 const SPACE_NOTICES_POLL_MS = 60_000
 const SHIP_KEY = 'ship41'
 

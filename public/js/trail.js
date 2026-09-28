@@ -1,5 +1,5 @@
 import { getFlightTrack, getMeta } from './path.js'
-import { haversineKm, isNearSurface } from './utils.js'
+import { haversineKm } from './utils.js'
 
 const STORAGE_KEY = 'bsz-ship41-live-trail-v1'
 const MAX_POINTS = 20_000
@@ -95,7 +95,11 @@ export function saveLiveTrail(points) {
 }
 
 export function appendLiveFix(trail, fix) {
-  if (!isNearSurface(fix.altitude)) return trail
+  // Keep a trail of live SpaceX fixes in flight and on the surface.
+  // Skip obviously invalid / placeholder altitudes from predicted trajectories.
+  if (!Number.isFinite(fix.altitude) || fix.altitude < -500 || fix.altitude > 600_000) {
+    return trail
+  }
   if (!(fix.gps_time > getMeta().archiveEndGpsTime + 0.5)) return trail
 
   const point = {
@@ -112,6 +116,11 @@ export function appendLiveFix(trail, fix) {
 
   const last = base[base.length - 1]
   if (last && distanceMeters(last, point) < MIN_MOVE_M) {
+    // Still refresh the tip so the marker trail stays current while hovering.
+    if (last.gps_time < point.gps_time) {
+      const next = [...base.slice(0, -1), point]
+      return next
+    }
     return trail.length === base.length ? trail : base
   }
 

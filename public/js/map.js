@@ -8,6 +8,23 @@ import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const MAX_BRIDGE_KM = 1
 const FOLLOW_ZOOM = 8
+/** SpaceX pad-predicted trajectories often publish huge negative altitudes — ignore those. */
+const TRAJ_ALT_MIN_M = -200
+const TRAJ_ALT_MAX_M = 600_000
+const PAD_STILL_ALT_M = 1500
+const PAD_STILL_KM = 5
+
+function isSaneTrajectoryPoint(p) {
+  return (
+    Number.isFinite(p.latitude) &&
+    Number.isFinite(p.longitude) &&
+    Math.abs(p.latitude) <= 90 &&
+    Math.abs(p.longitude) <= 180 &&
+    Number.isFinite(p.altitude) &&
+    p.altitude >= TRAJ_ALT_MIN_M &&
+    p.altitude <= TRAJ_ALT_MAX_M
+  )
+}
 
 function hazardStyle(notice) {
   const text = `${notice.name || ''} ${notice.type || ''}`.toUpperCase()
@@ -445,13 +462,32 @@ export function createMap(container, { prelaunch = false } = {}) {
         return
       }
 
-      // Live tracking replaces the planned splashdown marker.
-      source.plannedLanding = null
-
       const current = ship.current
       const live = [current.latitude, current.longitude]
       latestLive = live
       const landed = isNearSurface(current.altitude)
+      const stillOnPad =
+        Number.isFinite(current.altitude) &&
+        current.altitude < PAD_STILL_ALT_M &&
+        haversineKm(
+          meta.launchPad.lat,
+          meta.launchPad.lon,
+          current.latitude,
+          current.longitude,
+        ) < PAD_STILL_KM
+
+      // Keep the planned splashdown marker while Ship 41 is still on the pad.
+      if (stillOnPad && meta.landingFix) {
+        source.plannedLanding = {
+          latlng: [meta.landingFix.lat, meta.landingFix.lon],
+          popup: `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
+            meta.landingFix.lat,
+            meta.landingFix.lon,
+          )}`,
+        }
+      } else {
+        source.plannedLanding = null
+      }
 
       if (camera === 'auto' && !landed) {
         camera = 'follow'
@@ -481,14 +517,21 @@ export function createMap(container, { prelaunch = false } = {}) {
       const sxTrajectory = Array.isArray(ship.trajectory) ? ship.trajectory : []
       if (!meta.hasFlightPath && sxTrajectory.length >= 2) {
         const sxPath = sxTrajectory
-          .filter(
-            (p) =>
-              Number.isFinite(p.latitude) &&
-              Number.isFinite(p.longitude) &&
-              (p.altitude == null || p.altitude > -500000),
-          )
+          .filter(isSaneTrajectoryPoint)
           .map((p) => [p.latitude, p.longitude])
+        // Prefer the live SpaceX path once it has real motion / altitude.
         if (sxPath.length >= 2) fullPath = thinLatLonPath(sxPath)
+      }
+
+      // Always extend the displayed path with the live tip.
+      if (
+        fullPath.length &&
+        (fullPath[fullPath.length - 1][0] !== live[0] ||
+          fullPath[fullPath.length - 1][1] !== live[1])
+      ) {
+        fullPath = [...fullPath, live]
+      } else if (!fullPath.length) {
+        fullPath = [live]
       }
 
       const livePath = liveTrail.map((p) => [p.latitude, p.longitude])
@@ -519,7 +562,7 @@ export function createMap(container, { prelaunch = false } = {}) {
         }
       }
 
-      if (landed && meta.landingFix) {
+      if (landed && meta.landingFix && !stillOnPad) {
         source.landing = {
           latlng: [meta.landingFix.lat, meta.landingFix.lon],
           popup: `<strong>Splashdown</strong><br>${formatLatLon(
@@ -536,7 +579,7 @@ export function createMap(container, { prelaunch = false } = {}) {
         latlng: live,
         radius: 9,
         halo: 18,
-        popup: `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
+        popup: `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}<br>Live from SpaceX`,
       }
 
       // Keep wrap copies in sync with the viewport, then redraw live layers.
