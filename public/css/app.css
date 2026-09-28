@@ -463,9 +463,16 @@ select {
 }
 
 .livestream-inner {
-  max-width: var(--max);
+  max-width: none;
   margin: 0 auto;
   padding: 0.9rem var(--masthead-pad-x) 1.1rem;
+}
+
+.livestream-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
 }
 
 .livestream-head {
@@ -505,8 +512,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0 0 0.75rem;
-  max-width: 960px;
+  margin: 0 0 0.55rem;
 }
 
 .livestream-form input {
@@ -584,9 +590,15 @@ select {
 
 .livestream-frame {
   position: relative;
-  width: min(100%, 960px);
+  width: 100%;
   aspect-ratio: 16 / 9;
   background: #0c0e12;
+}
+
+@media (max-width: 800px) {
+  .livestream-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .livestream-frame iframe {
