@@ -11,9 +11,13 @@ import {
   formatDownrange,
   formatLatLon,
   haversineKm,
+  formatOrbitAltitude,
   formatSignedMissionClock,
   formatSpeedKmh,
   formatUpdateAge,
+  formatVerticalRate,
+  orbitAltitudes,
+  verticalRateMs,
 } from './utils.js'
 
 const THEME_KEY = 'bsz-theme'
@@ -86,6 +90,7 @@ function renderShell(root) {
             <div class="topbar-metric">
               <span class="topbar-metric-label">Altitude</span>
               <span class="topbar-metric-value" data-live="altitude">— <span>km</span></span>
+              <span class="topbar-metric-value topbar-metric-secondary" data-live="vertical">— <span>m/s</span></span>
             </div>
             <div class="topbar-metric">
               <span class="topbar-metric-label">Speed</span>
@@ -549,18 +554,43 @@ function renderMissionClock(state, nowMs) {
   )
 }
 
+function recentFixes() {
+  try {
+    const trail = loadLiveTrail()
+    if (!Array.isArray(trail) || trail.length < 2) return null
+    return [trail[trail.length - 2], trail[trail.length - 1]]
+  } catch {
+    return null
+  }
+}
+
 function renderLiveReadouts(state) {
   const altEl = document.querySelector('[data-live="altitude"]')
+  const vertEl = document.querySelector('[data-live="vertical"]')
   const spdEl = document.querySelector('[data-live="speed"]')
-  if (!altEl || !spdEl) return
+  if (!altEl || !spdEl || !vertEl) return
   const current = state?.ship?.current
   if (!current) {
     altEl.innerHTML = '— <span>km</span>'
+    vertEl.innerHTML = '— <span>m/s</span>'
     spdEl.innerHTML = '— <span>km/h</span>'
     return
   }
   altEl.innerHTML = `${formatAltitudeKm(current.altitude)} <span>km</span>`
   spdEl.innerHTML = `${formatSpeedKmh(current.speed)} <span>km/h</span>`
+  const pair = recentFixes()
+  const rate = pair ? verticalRateMs(pair[0], pair[1]) : null
+  vertEl.innerHTML = `${formatVerticalRate(rate)} <span>m/s</span>`
+  vertEl.setAttribute(
+    'aria-label',
+    Number.isFinite(rate)
+      ? rate < -1
+        ? 'Descending'
+        : rate > 1
+          ? 'Climbing'
+          : 'Level'
+      : 'Vertical speed unavailable',
+  )
 }
 
 function renderTelemetry(state) {
@@ -596,11 +626,25 @@ function renderTelemetry(state) {
     traveledKm = 0
   }
   const traveled = onPad ? '0 m' : formatDownrange(traveledKm)
+  const pair = recentFixes()
+  const orbit = !onPad && pair ? orbitAltitudes(pair[0], pair[1]) : null
+  const inAtmosphere =
+    !onPad &&
+    !orbit &&
+    Number.isFinite(current.altitude) &&
+    current.altitude < 120_000 &&
+    current.altitude > 20_000
+  const perigeeNote =
+    orbit && Number.isFinite(orbit.perigeeM) && orbit.perigeeM < 0 ? 'below surface' : ''
+  const apogeeText = orbit ? formatOrbitAltitude(orbit.apogeeM) : '—'
+  const perigeeText = orbit ? formatOrbitAltitude(orbit.perigeeM) : inAtmosphere ? 'entry' : '—'
 
   const grid = document.querySelector('.telemetry-grid')
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
     <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
+    <div><dt>Apogee</dt><dd>${apogeeText}</dd></div>
+    <div><dt>Perigee</dt><dd>${perigeeText}${perigeeNote ? ` <span>${perigeeNote}</span>` : ''}</dd></div>
     <div><dt>Traveled</dt><dd>${traveled} <span>total</span></dd></div>
   `
   if (recordTelemetrySample(current) || !chartsPainted) {
