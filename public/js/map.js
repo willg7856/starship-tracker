@@ -10,7 +10,7 @@ import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 const MAX_BRIDGE_KM = 1
 const FOLLOW_ZOOM = 8
 /** Draw overlays on neighboring world copies so wrapping maps stay populated. */
-const LON_WRAPS = [-720, -360, 0, 360, 720]
+const LON_WRAPS = [0]
 
 function hazardStyle(notice) {
   const text = `${notice.name || ''} ${notice.type || ''}`.toUpperCase()
