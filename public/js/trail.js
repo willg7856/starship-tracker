@@ -1,5 +1,10 @@
 import { getFlightTrack, getMeta } from './path.js'
-import { haversineKm } from './utils.js'
+import {
+  formatAltitudeKm,
+  formatSpeedKmh,
+  haversineKm,
+  speedBetweenFixes,
+} from './utils.js'
 
 const STORAGE_KEY = 'bsz-ship41-live-trail-v1'
 const MAX_POINTS = 20_000
@@ -263,6 +268,27 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
     })
   }
   return points
+}
+
+/**
+ * Mission elapsed time when altitude and speed both first read as 0 after
+ * the ship has been flying. Ignores the pad, where both readouts are already 0.
+ */
+export function restElapsedSeconds(points, liftoffGps) {
+  if (!Array.isArray(points) || points.length < 2 || !Number.isFinite(liftoffGps)) {
+    return null
+  }
+  let wasUp = false
+  for (let i = 1; i < points.length; i++) {
+    const alt = points[i].altitude
+    if (Number.isFinite(alt) && alt >= 500) wasUp = true
+    if (!wasUp) continue
+    const spd = speedBetweenFixes(points[i - 1], points[i])
+    if (formatAltitudeKm(alt) !== '0' || formatSpeedKmh(spd) !== '0') continue
+    const met = points[i].gps_time - liftoffGps
+    if (met > 30 && met < 20 * 3600) return met
+  }
+  return null
 }
 
 /** Keep the shared track, and add live fixes that are newer than its tip. */

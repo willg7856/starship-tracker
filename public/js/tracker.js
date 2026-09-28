@@ -5,6 +5,7 @@ import {
   loadLiveTrail,
   mergeTrailAhead,
   pointsFromNoticesCoordinates,
+  restElapsedSeconds,
   saveLiveTrail,
 } from './trail.js'
 import { gpsTimeToDate, speedBetweenFixes } from './utils.js'
@@ -148,6 +149,7 @@ export function startTracker(onChange) {
     loading: true,
     positionSource: null,
     liveTrail: loadLiveTrail(),
+    landedElapsedSeconds: null,
     spaceNoticesExtension: [],
     lastMovedAt: null,
   }
@@ -186,6 +188,11 @@ export function startTracker(onChange) {
     }
     const history = pointsFromNoticesCoordinates(noticesCoordinates, current, pad)
     if (history.length < 2) return
+    const mission = current.mission_time
+    if (Number.isFinite(mission) && mission > 1 && mission < 20 * 3600) {
+      const rest = restElapsedSeconds(history, current.gps_time - mission)
+      if (rest != null) state.landedElapsedSeconds = rest
+    }
     const merged = mergeTrailAhead(history, state.liveTrail)
     state.liveTrail = merged
     saveLiveTrail(merged)
