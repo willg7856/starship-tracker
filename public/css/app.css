@@ -318,6 +318,10 @@ select {
   backdrop-filter: blur(6px);
 }
 
+.map-view-toggle[hidden] {
+  display: none !important;
+}
+
 .map-view-toggle button {
   appearance: none;
   border: 0;

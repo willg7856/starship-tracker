@@ -42,7 +42,7 @@ export function createMap(container, { prelaunch = false } = {}) {
   }).setView(initialCenter, prelaunch ? 7 : 9)
 
   L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
     { maxZoom: 18 },
   ).addTo(map)
 
@@ -101,11 +101,12 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   const shell = container.closest('.map-shell') || container.parentElement
   let toggleEl = shell?.querySelector('.map-view-toggle')
-  if (!toggleEl && shell) {
+  if (!prelaunch && !toggleEl && shell) {
     toggleEl = document.createElement('div')
     toggleEl.className = 'map-view-toggle'
     toggleEl.setAttribute('role', 'group')
     toggleEl.setAttribute('aria-label', 'Map view')
+    toggleEl.hidden = true
     toggleEl.innerHTML =
       '<button type="button" data-mode="drift" class="active">Drift</button>' +
       '<button type="button" data-mode="flight">Flight</button>'

@@ -207,11 +207,17 @@ function renderStatus(state, nowMs) {
 }
 
 function ensureMap(mapApi, prelaunch) {
-  if (mapApi) return mapApi
   const mapSection = document.querySelector('.map-section')
+  const needsCreate =
+    !mapApi ||
+    (mapApi.prelaunch && !prelaunch) ||
+    !document.getElementById('track-map')
+  if (!needsCreate) return mapApi
   mapSection.innerHTML =
     '<div class="map-shell"><div id="track-map" class="track-map"></div></div>'
-  return createMap(document.getElementById('track-map'), { prelaunch })
+  const next = createMap(document.getElementById('track-map'), { prelaunch })
+  next.prelaunch = prelaunch
+  return next
 }
 
 async function main() {
