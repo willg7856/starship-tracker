@@ -5,7 +5,7 @@ import {
   loadLiveTrail,
   saveLiveTrail,
 } from './trail.js'
-import { gpsTimeToDate, haversineKm } from './utils.js'
+import { gpsTimeToDate, speedBetweenFixes } from './utils.js'
 
 const POLL_MS = 1_000
 const SPACE_NOTICES_POLL_MS = 60_000
@@ -26,37 +26,6 @@ let lastDerivedSpeed = Number.isFinite(lastSpeedFix?.derivedSpeed)
   ? lastSpeedFix.derivedSpeed
   : null
 
-function speedFromFixes(prev, next) {
-  const dt = next.gps_time - prev.gps_time
-  if (!(dt >= 1) || dt > 180) return null
-  const a = prev.r_ecef
-  const b = next.r_ecef
-  if (
-    Array.isArray(a) &&
-    Array.isArray(b) &&
-    a.length >= 3 &&
-    b.length >= 3 &&
-    [a[0], a[1], a[2], b[0], b[1], b[2]].every(Number.isFinite)
-  ) {
-    return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / dt
-  }
-  if (
-    ![prev.latitude, prev.longitude, next.latitude, next.longitude].every(
-      Number.isFinite,
-    )
-  ) {
-    return null
-  }
-  const groundM =
-    haversineKm(prev.latitude, prev.longitude, next.latitude, next.longitude) *
-    1000
-  const dAlt =
-    Number.isFinite(next.altitude) && Number.isFinite(prev.altitude)
-      ? next.altitude - prev.altitude
-      : 0
-  return Math.hypot(groundM, dAlt) / dt
-}
-
 /**
  * SpaceX is publishing position but leaving speed at 0. Measure speed from
  * the last two fixes. Keep a reported speed once it is actually non-zero.
@@ -76,7 +45,7 @@ function withDerivedSpeed(current) {
   if (reported > 1) {
     lastDerivedSpeed = null
   } else if (newer) {
-    const derived = speedFromFixes(lastSpeedFix, fix)
+    const derived = speedBetweenFixes(lastSpeedFix, fix)
     if (Number.isFinite(derived) && derived >= 0 && derived < 12_000) {
       speed = derived
       lastDerivedSpeed = derived

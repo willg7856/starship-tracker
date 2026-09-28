@@ -106,6 +106,8 @@ export function appendLiveFix(trail, fix) {
     gps_time: fix.gps_time,
     latitude: fix.latitude,
     longitude: fix.longitude,
+    altitude: fix.altitude,
+    r_ecef: Array.isArray(fix.r_ecef) ? fix.r_ecef.slice(0, 3) : undefined,
   }
   if (!isValidFix(point)) return trail
 

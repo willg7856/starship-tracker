@@ -1,3 +1,7 @@
+import { loadLiveTrail } from './trail.js'
+import { getMeta } from './path.js'
+import { GPS_TO_UNIX_OFFSET, haversineKm, speedBetweenFixes } from './utils.js'
+
 const HISTORY_KEY = 'bsz-ship41-telem-v1'
 const MAX_SAMPLES = 5000
 
@@ -76,7 +80,7 @@ function niceMax(value, floor) {
   return step * pow
 }
 
-function drawChart(canvas, points, { color, formatY, yFloor }) {
+function drawChart(canvas, points, { color, formatY, yFloor, timeOrigin = null, domainStart = null }) {
   if (!points.length) return
   const parent = canvas.parentElement
   const width = Math.max(280, parent?.clientWidth || 320)
@@ -98,15 +102,16 @@ function drawChart(canvas, points, { color, formatY, yFloor }) {
   ctx.fillStyle = paper
   ctx.fillRect(0, 0, width, height)
 
-  const pad = { l: 52, r: 12, t: 12, b: 26 }
+  const pad = { l: 64, r: 12, t: 12, b: 26 }
   const plotW = width - pad.l - pad.r
   const plotH = height - pad.t - pad.b
 
   const values = points.map((p) => p.v)
   const maxV = niceMax(Math.max(0, ...values), yFloor)
-  const t0 = points[0].t
+  const t0 = domainStart ?? points[0].t
   const t1 = points[points.length - 1].t
   const span = Math.max(t1 - t0, 1)
+  const origin = timeOrigin ?? t0
 
   ctx.strokeStyle = line
   ctx.lineWidth = 1
@@ -130,7 +135,7 @@ function drawChart(canvas, points, { color, formatY, yFloor }) {
   for (let i = 0; i <= xTicks; i++) {
     const frac = i / xTicks
     const x = pad.l + plotW * frac
-    ctx.fillText(formatElapsed(span * frac), x, height - pad.b + 8)
+    ctx.fillText(formatElapsed(t0 + span * frac - origin), x, height - pad.b + 8)
   }
 
   const xy = points.map((p) => ({
@@ -161,10 +166,60 @@ function drawChart(canvas, points, { color, formatY, yFloor }) {
   ctx.fill()
 }
 
+function liftoffGpsSeconds() {
+  try {
+    const ms = getMeta().plannedLiftoffMs
+    if (typeof ms !== 'number') return null
+    return ms / 1000 - GPS_TO_UNIX_OFFSET
+  } catch {
+    return null
+  }
+}
+
+/** Speed between every recorded fix, so the graph is the tracked flight not a flat zero. */
+function speedSeriesKmH() {
+  let trail = []
+  try {
+    trail = loadLiveTrail()
+  } catch {
+    trail = []
+  }
+  const points = []
+  for (let i = 1; i < trail.length; i++) {
+    const spd = speedBetweenFixes(trail[i - 1], trail[i])
+    if (!Number.isFinite(spd)) continue
+    points.push({ t: trail[i].gps_time, v: spd * 3.6 })
+  }
+  if (points.length) {
+    const first = trail[0]
+    const launch = liftoffGpsSeconds()
+    let nearPad = false
+    try {
+      const pad = getMeta().launchPad
+      nearPad =
+        haversineKm(first.latitude, first.longitude, pad.lat, pad.lon) < 5
+    } catch {
+      nearPad = false
+    }
+    if (
+      nearPad &&
+      launch != null &&
+      Math.abs(first.gps_time - launch) < 30 * 60
+    ) {
+      points.unshift({ t: Math.max(first.gps_time, launch), v: 0 })
+    }
+    return points
+  }
+  return samples
+    .filter((p) => Number.isFinite(p.spd) && p.spd > 1)
+    .map((p) => ({ t: p.t, v: p.spd * 3.6 }))
+}
+
 export function drawTelemetryCharts() {
   const altCanvas = document.querySelector('[data-chart="altitude"]')
   const spdCanvas = document.querySelector('[data-chart="speed"]')
-  if (!altCanvas || !spdCanvas || samples.length === 0) return
+  const speedPoints = speedSeriesKmH()
+  if (!altCanvas || !spdCanvas || (samples.length === 0 && speedPoints.length === 0)) return
 
   const altColor = cssVar('--ignition', '#e24a12')
   const spdColor = cssVar('--signal', '#0f7a5a')
@@ -198,15 +253,21 @@ export function drawTelemetryCharts() {
     },
   )
 
+  const liftoffGps = liftoffGpsSeconds()
+  const firstSpeed = speedPoints[0]
+  const coversFlight =
+    liftoffGps != null &&
+    firstSpeed &&
+    firstSpeed.t - liftoffGps < 20 * 60
   drawChart(
     spdCanvas,
-    samples
-      .filter((p) => Number.isFinite(p.spd))
-      .map((p) => ({ t: p.t, v: p.spd * 3.6 })),
+    speedPoints,
     {
       color: spdColor,
       yFloor: 10,
-      formatY: (v) => `${Math.round(v)}`,
+      formatY: (v) => `${Math.round(v).toLocaleString('en-US')}`,
+      timeOrigin: liftoffGps,
+      domainStart: coversFlight ? liftoffGps : null,
     },
   )
 }
