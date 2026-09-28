@@ -2,7 +2,6 @@ import {
   buildFlightPath,
   getMeta,
   getNoticePolygons,
-  splitPathByDistanceGap,
 } from './path.js'
 import { thinLatLonPath } from './trail.js'
 import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
@@ -73,22 +72,18 @@ export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
   const notices = getNoticePolygons()
-  let mode = prelaunch || !meta.hasFlightPath ? 'flight' : 'drift'
   /** @type {'follow' | 'wide' | 'auto'} */
   let camera = prelaunch ? 'wide' : 'follow'
   let showHazards = true
   let fittedCamera = null
-  let fittedMode = null
   let latestLive = null
   let latestFullPath = []
-  let latestDriftFrame = []
   let userInteracting = false
   let activeWraps = [0]
 
   const layers = {
     ascent: [],
     reentry: [],
-    drift: [],
     hazards: [],
     live: [],
     ship: [],
@@ -104,7 +99,6 @@ export function createMap(container, { prelaunch = false } = {}) {
     reentry: paths.reentry.length >= 2 ? paths.reentry : null,
     ascentStyle: { color: '#ff5a1f', weight: 3, opacity: 0.95 },
     reentryStyle: { color: '#e64613', weight: 3, opacity: 0.95 },
-    drift: [],
     live: null,
     liveStyle: null,
     launch: {
@@ -258,14 +252,10 @@ export function createMap(container, { prelaunch = false } = {}) {
   function rebuildPaths() {
     clearLayerList(map, layers.ascent)
     clearLayerList(map, layers.reentry)
-    clearLayerList(map, layers.drift)
     clearLayerList(map, layers.live)
     if (source.ascent) addPolylineCopies(source.ascent, source.ascentStyle, layers.ascent)
     if (source.reentry) {
       addPolylineCopies(source.reentry, source.reentryStyle, layers.reentry)
-    }
-    for (const seg of source.drift) {
-      addPolylineCopies(seg.points, seg.style, layers.drift)
     }
     if (source.live) {
       addPolylineCopies(source.live, source.liveStyle, layers.live)
@@ -318,30 +308,6 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   const shell = container.closest('.map-shell') || container.parentElement
 
-  let toggleEl = shell?.querySelector('.map-view-toggle')
-  if (!prelaunch && !toggleEl && shell) {
-    toggleEl = document.createElement('div')
-    toggleEl.className = 'map-view-toggle'
-    toggleEl.setAttribute('role', 'group')
-    toggleEl.setAttribute('aria-label', 'Map path view')
-    toggleEl.hidden = true
-    toggleEl.innerHTML =
-      '<button type="button" data-mode="drift" class="active">Drift</button>' +
-      '<button type="button" data-mode="flight">Flight</button>'
-    shell.prepend(toggleEl)
-    toggleEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-mode]')
-      if (!btn) return
-      mode = btn.dataset.mode
-      toggleEl.querySelectorAll('button').forEach((b) => {
-        b.classList.toggle('active', b === btn)
-      })
-      fittedMode = null
-      if (camera === 'auto') applyCamera(true)
-    })
-  }
-  if (toggleEl && prelaunch) toggleEl.hidden = true
-
   let cameraEl = shell?.querySelector('.map-camera-controls')
   if (!cameraEl && shell) {
     cameraEl = document.createElement('div')
@@ -382,7 +348,6 @@ export function createMap(container, { prelaunch = false } = {}) {
   function setCamera(next, force = false) {
     camera = next
     fittedCamera = null
-    fittedMode = null
     userInteracting = false
     syncCameraButtons()
     applyCamera(force)
@@ -395,7 +360,6 @@ export function createMap(container, { prelaunch = false } = {}) {
       points.push([meta.landingFix.lat, meta.landingFix.lon])
     }
     for (const p of latestFullPath) points.push(p)
-    for (const p of latestDriftFrame) points.push(p)
     if (latestLive) points.push(latestLive)
     if (showHazards) {
       for (const notice of notices) {
@@ -435,7 +399,7 @@ export function createMap(container, { prelaunch = false } = {}) {
       return
     }
 
-    if (camera === 'wide') {
+    if (camera === 'wide' || camera === 'auto') {
       if (!force && fittedCamera === 'wide') return
       fittedCamera = 'wide'
       const bounds = overviewBounds()
@@ -444,31 +408,6 @@ export function createMap(container, { prelaunch = false } = {}) {
         duration: 0.55,
         maxZoom: 4,
       })
-      return
-    }
-
-    const view = mode
-    if (!force && fittedMode === view) return
-    fittedMode = view
-    if (view === 'drift') {
-      const anchor = meta.landingFix
-        ? [[meta.landingFix.lat, meta.landingFix.lon]]
-        : [[meta.launchPad.lat, meta.launchPad.lon]]
-      const bounds = L.latLngBounds(
-        latestDriftFrame.length ? latestDriftFrame : anchor,
-      )
-      if (latestLive) bounds.extend(latestLive)
-      map.fitBounds(bounds.pad(0.35), { animate: false })
-      return
-    }
-    if (latestFullPath.length >= 2) {
-      const bounds = L.latLngBounds(latestFullPath)
-      if (latestLive) bounds.extend(latestLive)
-      map.fitBounds(bounds.pad(0.08), { animate: false })
-      return
-    }
-    if (latestLive) {
-      map.setView(latestLive, Math.max(map.getZoom(), 6), { animate: false })
     }
   }
 
@@ -513,9 +452,6 @@ export function createMap(container, { prelaunch = false } = {}) {
       const live = [current.latitude, current.longitude]
       latestLive = live
       const landed = isNearSurface(current.altitude)
-      const view = landed && meta.hasFlightPath ? mode : 'flight'
-
-      if (toggleEl) toggleEl.hidden = !(landed && meta.hasFlightPath)
 
       if (camera === 'auto' && !landed) {
         camera = 'follow'
@@ -526,30 +462,6 @@ export function createMap(container, { prelaunch = false } = {}) {
         p.latitude,
         p.longitude,
       ])
-
-      const oceanDriftCleanSegments = (() => {
-        const extended = paths.oceanDriftSegments.map((seg) => [...seg])
-        if (snExtensionPath.length > 0) {
-          const lastSeg = extended[extended.length - 1]
-          const anchor = lastSeg?.[lastSeg.length - 1]
-          const firstSn = snExtensionPath[0]
-          if (
-            anchor &&
-            haversineKm(anchor[0], anchor[1], firstSn[0], firstSn[1]) <=
-              MAX_BRIDGE_KM
-          ) {
-            extended[extended.length - 1] = thinLatLonPath([
-              ...lastSeg,
-              ...snExtensionPath,
-            ])
-          } else {
-            for (const seg of splitPathByDistanceGap(snExtensionPath)) {
-              extended.push(thinLatLonPath(seg))
-            }
-          }
-        }
-        return extended.map((seg) => thinLatLonPath(seg))
-      })()
 
       let fullPath = [...paths.full]
       if (snExtensionPath.length > 0) {
@@ -580,26 +492,7 @@ export function createMap(container, { prelaunch = false } = {}) {
       }
 
       const livePath = liveTrail.map((p) => [p.latitude, p.longitude])
-      const driftFrame = meta.landingFix
-        ? [[meta.landingFix.lat, meta.landingFix.lon]]
-        : [[meta.launchPad.lat, meta.launchPad.lon]]
-      for (const seg of oceanDriftCleanSegments) for (const p of seg) driftFrame.push(p)
-      for (const p of livePath) driftFrame.push(p)
-      driftFrame.push(live)
-
       latestFullPath = fullPath
-      latestDriftFrame = driftFrame
-
-      source.drift = oceanDriftCleanSegments
-        .filter((segment) => segment.length >= 2)
-        .map((points) => ({
-          points,
-          style: {
-            color: '#ffc400',
-            weight: view === 'drift' ? 4 : 2.5,
-            opacity: 0.95,
-          },
-        }))
 
       if (!meta.hasFlightPath && fullPath.length >= 2) {
         source.ascent = fullPath
@@ -607,48 +500,22 @@ export function createMap(container, { prelaunch = false } = {}) {
       source.ascentStyle = {
         color: '#ff5a1f',
         weight: 3,
-        opacity: view === 'flight' ? 0.95 : 0.55,
+        opacity: 0.95,
       }
       source.reentryStyle = {
         color: '#e64613',
         weight: 3,
-        opacity: view === 'flight' ? 0.95 : 0.55,
+        opacity: 0.95,
       }
 
       source.live = null
       source.liveStyle = null
-      if (landed && livePath.length) {
-        const tipSeg = oceanDriftCleanSegments[oceanDriftCleanSegments.length - 1]
-        const anchor = tipSeg?.[tipSeg.length - 1]
-        const firstLive = livePath[0]
-        let pts = null
-        if (
-          anchor &&
-          haversineKm(anchor[0], anchor[1], firstLive[0], firstLive[1]) >
-            MAX_BRIDGE_KM
-        ) {
-          pts = livePath.length >= 2 ? thinLatLonPath(livePath) : null
-        } else {
-          pts = []
-          if (anchor) pts.push(anchor)
-          for (const p of livePath) pts.push(p)
-          const last = pts[pts.length - 1]
-          if (
-            last &&
-            haversineKm(last[0], last[1], live[0], live[1]) <= MAX_BRIDGE_KM &&
-            Math.hypot(last[0] - live[0], last[1] - live[1]) > 1e-7
-          ) {
-            pts.push(live)
-          }
-          pts = pts.length >= 2 ? thinLatLonPath(pts) : null
-        }
-        if (pts) {
-          source.live = pts
-          source.liveStyle = {
-            color: '#ffc400',
-            weight: view === 'drift' ? 4 : 2.5,
-            opacity: 0.95,
-          }
+      if (livePath.length >= 2) {
+        source.live = thinLatLonPath(livePath)
+        source.liveStyle = {
+          color: '#ffc400',
+          weight: 2.5,
+          opacity: 0.95,
         }
       }
 
@@ -664,13 +531,11 @@ export function createMap(container, { prelaunch = false } = {}) {
         source.landing = null
       }
 
-      const radius = view === 'drift' ? 11 : 9
-      const halo = view === 'drift' ? 22 : 18
       const shipLabel = meta.vehicle || 'Ship 41'
       source.ship = {
         latlng: live,
-        radius,
-        halo,
+        radius: 9,
+        halo: 18,
         popup: `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
       }
 

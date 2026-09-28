@@ -94,20 +94,6 @@ export function describeLocation(lat, lon, altitudeM) {
   return 'En route'
 }
 
-export function formatDriftDistance(km) {
-  if (!Number.isFinite(km)) return '—'
-  if (km < 0.05) return '0 m'
-  if (km < 1) return `${Math.round(km * 1000)} m`
-  if (km < 10) return `${km.toFixed(2)} km`
-  return `${km.toFixed(1)} km`
-}
-
-/** Elapsed ocean-drift duration since splashdown, in hours. */
-export function formatDriftDuration(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return '—'
-  return `${(seconds / 3600).toFixed(1)}H`
-}
-
 export function formatUpdateAge(seconds) {
   if (seconds < 60) return `${seconds}s ago`
   const totalMins = Math.floor(seconds / 60)
