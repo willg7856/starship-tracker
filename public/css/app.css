@@ -212,6 +212,11 @@ select {
   color: var(--muted);
 }
 
+.topbar-metric-secondary {
+  font-size: 1.15rem;
+  color: var(--ink-soft);
+}
+
 .masthead-brand-block {
   display: grid;
   gap: 0.4rem;
