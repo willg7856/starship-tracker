@@ -73,6 +73,14 @@ export function formatAltitudeKm(altitudeM) {
   return String(km)
 }
 
+/** Ground range from the launch pad, in kilometres. */
+export function formatDownrange(km) {
+  if (!Number.isFinite(km) || km < 0) return '—'
+  if (km < 1) return `${Math.round(km * 1000)} m`
+  if (km < 100) return `${km.toFixed(1)} km`
+  return `${Math.round(km).toLocaleString('en-US')} km`
+}
+
 export function formatLatLon(lat, lon) {
   const ns = lat >= 0 ? 'N' : 'S'
   const ew = lon >= 0 ? 'E' : 'W'

@@ -5,7 +5,9 @@ import {
   SPACEX_VEHICLE_TRACKER,
   describeLocation,
   formatAltitudeKm,
+  formatDownrange,
   formatLatLon,
+  haversineKm,
   formatSignedMissionClock,
   formatSpeedKmh,
   formatUpdateAge,
@@ -275,9 +277,15 @@ function renderTelemetry(state) {
   )
   document.querySelector('.telemetry-place').textContent = place
 
+  const pad = getMeta().launchPad
+  const downrange = formatDownrange(
+    haversineKm(pad.lat, pad.lon, current.latitude, current.longitude),
+  )
+
   const grid = document.querySelector('.telemetry-grid')
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
+    <div><dt>Downrange</dt><dd>${downrange} <span>from pad</span></dd></div>
   `
 }
 
