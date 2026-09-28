@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const body = await upstream.text()
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Cache-Control', 'public, max-age=10, s-maxage=10')
+    res.setHeader('Cache-Control', 'public, max-age=1, s-maxage=1')
     res.status(200).send(body)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'

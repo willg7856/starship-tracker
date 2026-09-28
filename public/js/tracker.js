@@ -7,12 +7,12 @@ import {
 } from './trail.js'
 import { gpsTimeToDate } from './utils.js'
 
-const POLL_MS = 5_000
+const POLL_MS = 1_000
 const SPACE_NOTICES_POLL_MS = 60_000
 const SHIP_KEY = 'ship41'
 
 export async function fetchShip41Tracker(signal) {
-  const res = await fetch(`/api/tracker?t=${Date.now()}`, {
+  const res = await fetch('/api/tracker', {
     signal,
     cache: 'no-store',
   })

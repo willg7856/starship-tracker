@@ -131,7 +131,7 @@ export default {
       return proxyUpstream({
         upstream:
           'https://sxcontent9668.azureedge.us/cms-assets/starship_tracker_public.json',
-        cacheControl: 'public, max-age=10, s-maxage=10',
+        cacheControl: 'public, max-age=1, s-maxage=1',
         bustCache: true,
         errorLabel: 'SpaceX tracker',
       })
