@@ -57,9 +57,10 @@ export function formatSignedMissionClock(secondsFromLiftoff, forceSign) {
 }
 
 export function formatSpeedKmh(speedMs) {
-  if (!Number.isFinite(speedMs) || speedMs < 0) return '0'
+  if (!Number.isFinite(speedMs)) return '—'
+  if (speedMs < 0) return '0'
   const kmh = Math.round(speedMs * 3.6)
-  if (kmh < 0 || kmh > 40000) return '0'
+  if (kmh < 0 || kmh > 45000) return '—'
   return kmh.toLocaleString('en-US')
 }
 

@@ -5,11 +5,100 @@ import {
   loadLiveTrail,
   saveLiveTrail,
 } from './trail.js'
-import { gpsTimeToDate } from './utils.js'
+import { gpsTimeToDate, haversineKm } from './utils.js'
 
 const POLL_MS = 1_000
 const SPACE_NOTICES_POLL_MS = 60_000
 const SHIP_KEY = 'ship41'
+const LAST_FIX_KEY = 'bsz-ship41-last-fix-v1'
+
+function readLastFix() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(LAST_FIX_KEY) || 'null')
+    return saved && Number.isFinite(saved.gps_time) ? saved : null
+  } catch {
+    return null
+  }
+}
+
+let lastSpeedFix = readLastFix()
+let lastDerivedSpeed = Number.isFinite(lastSpeedFix?.derivedSpeed)
+  ? lastSpeedFix.derivedSpeed
+  : null
+
+function speedFromFixes(prev, next) {
+  const dt = next.gps_time - prev.gps_time
+  if (!(dt >= 1) || dt > 180) return null
+  const a = prev.r_ecef
+  const b = next.r_ecef
+  if (
+    Array.isArray(a) &&
+    Array.isArray(b) &&
+    a.length >= 3 &&
+    b.length >= 3 &&
+    [a[0], a[1], a[2], b[0], b[1], b[2]].every(Number.isFinite)
+  ) {
+    return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / dt
+  }
+  if (
+    ![prev.latitude, prev.longitude, next.latitude, next.longitude].every(
+      Number.isFinite,
+    )
+  ) {
+    return null
+  }
+  const groundM =
+    haversineKm(prev.latitude, prev.longitude, next.latitude, next.longitude) *
+    1000
+  const dAlt =
+    Number.isFinite(next.altitude) && Number.isFinite(prev.altitude)
+      ? next.altitude - prev.altitude
+      : 0
+  return Math.hypot(groundM, dAlt) / dt
+}
+
+/**
+ * SpaceX is publishing position but leaving speed at 0. Measure speed from
+ * the last two fixes. Keep a reported speed once it is actually non-zero.
+ */
+function withDerivedSpeed(current) {
+  if (!current || !Number.isFinite(current.gps_time)) return current
+  const fix = {
+    gps_time: current.gps_time,
+    latitude: current.latitude,
+    longitude: current.longitude,
+    altitude: current.altitude,
+    r_ecef: current.r_ecef,
+  }
+  const reported = Number.isFinite(current.speed) ? current.speed : null
+  let speed = reported
+  const newer = lastSpeedFix && fix.gps_time > lastSpeedFix.gps_time + 0.5
+  if (reported > 1) {
+    lastDerivedSpeed = null
+  } else if (newer) {
+    const derived = speedFromFixes(lastSpeedFix, fix)
+    if (Number.isFinite(derived) && derived >= 0 && derived < 12_000) {
+      speed = derived
+      lastDerivedSpeed = derived
+    }
+  } else if (Number.isFinite(lastDerivedSpeed)) {
+    speed = lastDerivedSpeed
+  }
+  const flying = Number.isFinite(current.altitude) && current.altitude > 2000
+  if (!(reported > 1) && !(Number.isFinite(speed) && speed > 1) && flying) {
+    speed = null
+  }
+  if (!lastSpeedFix || newer) {
+    lastSpeedFix = { ...fix, derivedSpeed: lastDerivedSpeed }
+    try {
+      sessionStorage.setItem(LAST_FIX_KEY, JSON.stringify(lastSpeedFix))
+    } catch {
+      /* ignore */
+    }
+  }
+  if (speed === current.speed) return current
+  return { ...current, speed }
+}
 
 export async function fetchShip41Tracker(signal) {
   const res = await fetch('/api/tracker', {
@@ -135,7 +224,10 @@ export function startTracker(onChange) {
     try {
       const live = await fetchShip41Tracker(controller.signal)
       if (live) {
-        state.ship = live.ship
+        state.ship = {
+          ...live.ship,
+          current: withDerivedSpeed(live.ship.current),
+        }
         state.fetchedAt = live.fetchedAt
         state.positionSource = 'spacex'
         positionSource = 'spacex'
