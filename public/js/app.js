@@ -64,6 +64,16 @@ function renderShell(root) {
           </div>
           <div class="masthead-meta">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
+            <div class="live-readouts" aria-label="Live vehicle telemetry">
+              <div class="live-readout">
+                <span class="live-readout-label">Alt</span>
+                <span class="live-readout-value" data-live="altitude">— <span>km</span></span>
+              </div>
+              <div class="live-readout">
+                <span class="live-readout-label">Spd</span>
+                <span class="live-readout-value" data-live="speed">— <span>km/h</span></span>
+              </div>
+            </div>
             <p class="status-line" data-state="loading">Linking…</p>
             <div class="masthead-actions">
               <button type="button" class="theme-toggle">Dark</button>
@@ -166,6 +176,23 @@ function renderMissionClock(state, nowMs) {
   )
 }
 
+function renderLiveReadouts(state) {
+  const altEl = document.querySelector('[data-live="altitude"]')
+  const spdEl = document.querySelector('[data-live="speed"]')
+  if (!altEl || !spdEl) return
+  const current = state?.ship?.current
+  const strip = document.querySelector('.live-readouts')
+  if (!current) {
+    altEl.innerHTML = '— <span>km</span>'
+    spdEl.innerHTML = '— <span>km/h</span>'
+    if (strip) strip.dataset.state = 'waiting'
+    return
+  }
+  altEl.innerHTML = `${formatAltitudeKm(current.altitude)} <span>km</span>`
+  spdEl.innerHTML = `${formatSpeedKmh(current.speed)} <span>km/h</span>`
+  if (strip) strip.dataset.state = 'live'
+}
+
 function renderTelemetry(state, nowMs) {
   const section = document.querySelector('.telemetry')
   const current = state.ship?.current
@@ -215,8 +242,6 @@ function renderTelemetry(state, nowMs) {
   grid.classList.toggle('with-drift', Boolean(drift))
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
-    <div><dt>Speed</dt><dd>${formatSpeedKmh(current.speed)} <span>km/h</span></dd></div>
-    <div><dt>Altitude</dt><dd>${formatAltitudeKm(current.altitude)} <span>km</span></dd></div>
     ${
       drift
         ? `<div><dt>Ocean drift</dt><dd>${drift.label} <span>${drift.direction}</span></dd></div>
@@ -279,6 +304,7 @@ async function main() {
   const tick = (state) => {
     const nowMs = Date.now()
     renderMissionClock(state, nowMs)
+    renderLiveReadouts(state)
     renderStatus(state, nowMs)
     renderTelemetry(state, nowMs)
   }
