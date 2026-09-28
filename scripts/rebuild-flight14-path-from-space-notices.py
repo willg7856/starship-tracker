@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Rebuild src/data/flight13-ship-track.json from Space Notices.
+"""Rebuild public/data/flight14-ship-track.json from Space Notices.
 
-Pulls the live ship-40 feed and merges it with the Trajectory-layer seed
-embedded in the Space Notices Flight 13 page bundle.
+Pulls the live ship-41 feed and merges it with the Trajectory-layer seed
+embedded in the Space Notices Flight 14 page bundle (when available).
 """
 
 from __future__ import annotations
@@ -15,10 +15,12 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TRACK_PATH = ROOT / "src" / "data" / "flight13-ship-track.json"
-ENTRY_URL = "https://space-notices.com/entry/launch-starship-flight-13"
-LIVE_URL = "https://data.space-notices.com/space-notices-data/ship-40"
-UA = "Mozilla/5.0 (compatible; ship-40-tracker/1.0)"
+TRACK_PATH = ROOT / "public" / "data" / "flight14-ship-track.json"
+ENTRY_URL = (
+    "https://space-notices.com/entry/launch-starship-starlink-31-1-starship-flight-14"
+)
+LIVE_URL = "https://data.space-notices.com/space-notices-data/ship-41"
+UA = "Mozilla/5.0 (compatible; ship-41-tracker/1.0)"
 
 
 def fetch(url: str) -> bytes:
@@ -36,7 +38,7 @@ def extract_seed_points(js: str) -> list[dict]:
         r"\{id:(\d+),latitude:(-?\d+\.?\d*),longitude:(-?\d+\.?\d*)\}",
         js[start:end],
     )
-    if len(objs) < 1000:
+    if len(objs) < 100:
         raise RuntimeError(f"Seed trajectory too short ({len(objs)} points)")
     return [
         {"id": int(oid), "lat": float(lat), "lon": float(lon)} for oid, lat, lon in objs
@@ -49,11 +51,11 @@ def main() -> int:
     seed = None
     for chunk in chunks:
         js = fetch(f"https://www.space-notices.com{chunk}").decode("utf-8", "ignore")
-        if "space-notices-data/ship-40" in js and "let f=[" in js:
+        if "space-notices-data/ship-41" in js and "let f=[" in js:
             seed = extract_seed_points(js)
             break
     if seed is None:
-        raise RuntimeError("No Space Notices chunk contained the ship-40 seed path")
+        raise RuntimeError("No Space Notices chunk contained the ship-41 seed path")
 
     live = json.loads(fetch(LIVE_URL).decode("utf-8"))
     by_id = {p["id"]: p for p in seed}
@@ -67,7 +69,7 @@ def main() -> int:
 
     cur = json.loads(TRACK_PATH.read_text())
     buckets: dict[tuple[float, float], deque] = defaultdict(deque)
-    for p in cur["points"]:
+    for p in cur.get("points", []):
         buckets[(round(p["lat"], 6), round(p["lon"], 6))].append(p)
 
     points = []
@@ -78,7 +80,6 @@ def main() -> int:
         if buckets[key]:
             src = buckets[key].popleft()
             src_t = float(src["t"])
-            # Keep mission time monotonic and avoid inheriting old archive holes.
             if not points or 0 <= src_t - last_t <= 120:
                 t = src_t if not points else max(src_t, last_t)
             else:
@@ -105,39 +106,38 @@ def main() -> int:
         for p in points
     ]
 
-    def find_index(lat: float, lon: float) -> int | None:
-        for i, p in enumerate(out_points):
-            if abs(p["lat"] - lat) < 1e-6 and abs(p["lon"] - lon) < 1e-6:
-                return i
-        return None
-
-    entry_index = find_index(-26.665963, 41.09617) or cur["segments"]["entry_index"]
-    splashdown_index = (
-        find_index(-17.600414, 106.721456) or cur["segments"]["splashdown_index"]
-    )
-    lf = cur["landingFix"]
+    lf = dict(cur.get("landingFix") or {})
     last = out_points[-1]
-    gps_time = lf["gps_time"] + (last["t"] - lf["mission_time"])
+    if isinstance(lf.get("gps_time"), (int, float)) and isinstance(
+        lf.get("mission_time"), (int, float)
+    ):
+        gps_time = lf["gps_time"] + (last["t"] - lf["mission_time"])
+    else:
+        gps_time = None
 
     out = {
-        "source": "Space Notices Flight 13 trajectory (seed + live ship-40 feed)",
-        "url": "https://space-notices.com/entry/launch-starship-flight-13",
+        "source": "Space Notices Flight 14 trajectory (seed + live ship-41 feed)",
+        "url": ENTRY_URL,
         "description": (
-            "Full Flight 13 Ship path from the Space Notices Trajectory layer: "
+            "Full Flight 14 Ship path from the Space Notices Trajectory layer: "
             "hardcoded seed series merged with "
-            "https://data.space-notices.com/space-notices-data/ship-40. "
-            "Mission times and altitudes carried over from the prior Space Notices "
-            "archive where positions match."
+            f"{LIVE_URL}."
         ),
+        "vehicle": "Ship 41",
+        "flight": 14,
+        "phase": "flight",
         "landingFix": lf,
-        "splashdown": cur["splashdown"],
+        "splashdown": cur.get("splashdown"),
         "points": out_points,
-        "segments": {
-            "entry_index": entry_index,
-            "splashdown_index": splashdown_index,
-            "coast_end_index": entry_index,
-            "landing_start_index": entry_index,
-        },
+        "segments": cur.get(
+            "segments",
+            {
+                "entry_index": 0,
+                "splashdown_index": max(0, len(out_points) - 1),
+                "coast_end_index": 0,
+                "landing_start_index": 0,
+            },
+        ),
         "noticePolygons": cur.get("noticePolygons", []),
         "rawPointCount": len(out_points),
         "archivedThrough": {

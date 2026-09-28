@@ -73,8 +73,11 @@ export function formatLatLon(lat, lon) {
 
 export function describeLocation(lat, lon, altitudeM) {
   const nearSurface = altitudeM > -500 && altitudeM < 2000
-  if (lat < 0 && lon > 90 && lon < 130 && nearSurface) {
-    return 'Indian Ocean splashdown zone'
+  if (lat < -10 && lon < -80 && lon > -160 && nearSurface) {
+    return 'Pacific Ocean splashdown zone'
+  }
+  if (lat < 0 && lon > 70 && lon < 130 && nearSurface) {
+    return 'Indian Ocean contingency zone'
   }
   if (Math.abs(lat - 25.997) < 0.5 && Math.abs(lon + 97.158) < 0.5) {
     return 'Starbase, Texas'

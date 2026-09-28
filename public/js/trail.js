@@ -1,7 +1,7 @@
 import { getFlightTrack, getMeta } from './path.js'
 import { haversineKm, isNearSurface } from './utils.js'
 
-const STORAGE_KEY = 'bsz-ship40-live-trail-v3'
+const STORAGE_KEY = 'bsz-ship41-live-trail-v1'
 const MAX_POINTS = 20_000
 const MIN_MOVE_M = 40
 
@@ -119,9 +119,16 @@ export function appendLiveFix(trail, fix) {
   return next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next
 }
 
-/** Estimate when Ship 40 last moved, from shared track (not localStorage). */
+/** Estimate when Ship 41 last moved, from shared track (not localStorage). */
 export function estimateLastMoveGpsTime(current, snExtension = []) {
   const { splashdownGpsTime, splashdownMissionTime } = getMeta()
+  if (
+    typeof splashdownGpsTime !== 'number' ||
+    typeof splashdownMissionTime !== 'number'
+  ) {
+    return current.gps_time
+  }
+
   const trackPoints = getFlightTrack()
   const samples = trackPoints.map((p) => ({ lat: p.lat, lon: p.lon, t: p.t }))
   let lastT = trackPoints.length ? trackPoints[trackPoints.length - 1].t : 0

@@ -87,11 +87,11 @@ export default {
       })
     }
 
-    if (pathname === '/api/space-notices-ship40') {
+    if (pathname === '/api/space-notices-ship41') {
       return proxyUpstream({
-        upstream: 'https://data.space-notices.com/space-notices-data/ship-40',
+        upstream: 'https://data.space-notices.com/space-notices-data/ship-41',
         cacheControl: 'public, max-age=30, s-maxage=30',
-        errorLabel: 'Space Notices ship-40 feed',
+        errorLabel: 'Space Notices ship-41 feed',
       })
     }
 

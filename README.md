@@ -1,6 +1,6 @@
-# Ship 40 Tracker
+# Ship 41 Tracker
 
-Vanilla JS tracker for SpaceX Starship Flight 13 / Ship 40.
+Vanilla JS tracker for SpaceX Starship Flight 14 / Ship 41.
 
 ## Stack
 
@@ -14,7 +14,7 @@ npm install
 npx vercel --prod
 ```
 
-Attach domain `starship.beyondstagezero.com` (and optionally `ship40.beyondstagezero.com`) in the Vercel project.
+Attach domain `starship.beyondstagezero.com` (and optionally `ship41.beyondstagezero.com`) in the Vercel project.
 
 ## Optional Cloudflare Worker
 

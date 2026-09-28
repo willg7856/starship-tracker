@@ -7,39 +7,46 @@ let meta = null
 
 export async function loadTrack() {
   if (track) return meta
-  const res = await fetch('/data/flight13-ship-track.json')
+  const res = await fetch('/data/flight14-ship-track.json')
   if (!res.ok) throw new Error('Failed to load flight path')
   track = await res.json()
+  const first = track.points?.[0]
   meta = {
+    vehicle: track.vehicle || 'Ship 41',
+    flight: track.flight || 14,
+    phase: track.phase || 'prelaunch',
     launchPad: {
-      lat: track.points[0]?.lat ?? 25.99684,
-      lon: track.points[0]?.lon ?? -97.15804,
+      lat: first?.lat ?? 25.99684,
+      lon: first?.lon ?? -97.15804,
       label: 'Starbase Pad 2',
     },
-    landingFix: {
-      lat: track.landingFix.lat,
-      lon: track.landingFix.lon,
-      label: track.landingFix.label,
-    },
+    landingFix: track.landingFix
+      ? {
+          lat: track.landingFix.lat,
+          lon: track.landingFix.lon,
+          label: track.landingFix.label || 'Planned splashdown',
+        }
+      : null,
     splashdownMissionTime:
-      typeof track.landingFix.mission_time === 'number'
+      typeof track.landingFix?.mission_time === 'number'
         ? track.landingFix.mission_time
-        : 3990.1,
+        : null,
     splashdownGpsTime:
-      typeof track.landingFix.gps_time === 'number'
+      typeof track.landingFix?.gps_time === 'number'
         ? track.landingFix.gps_time
-        : 0,
+        : null,
     archiveEndGpsTime:
       track.archivedThrough?.gps_time ??
-      (typeof track.landingFix.gps_time === 'number'
+      (typeof track.landingFix?.gps_time === 'number'
         ? track.landingFix.gps_time
         : 0),
     bakedLatestId:
       track.spaceNotices?.latestId ??
       track.archivedThrough?.space_notices_id ??
       0,
-    entryIndex: track.segments.entry_index,
-    splashIndex: track.segments.splashdown_index,
+    entryIndex: track.segments?.entry_index ?? 0,
+    splashIndex: track.segments?.splashdown_index ?? 0,
+    hasFlightPath: (track.points?.length ?? 0) >= 2,
   }
   return meta
 }
@@ -50,7 +57,7 @@ export function getMeta() {
 }
 
 export function getFlightTrack() {
-  return track.points
+  return track.points || []
 }
 
 export function splitPathByDistanceGap(points, maxGapKm = MAX_DRIFT_GAP_KM) {
@@ -73,8 +80,16 @@ export function splitPathByDistanceGap(points, maxGapKm = MAX_DRIFT_GAP_KM) {
 
 export function buildFlightPath() {
   const points = getFlightTrack()
-  const { entryIndex, splashIndex } = getMeta()
+  const { entryIndex, splashIndex, hasFlightPath } = getMeta()
   const toLatLon = (p) => [p.lat, p.lon]
+  if (!hasFlightPath) {
+    return {
+      ascent: [],
+      reentry: [],
+      oceanDriftSegments: [],
+      full: points.map(toLatLon),
+    }
+  }
   const ascent = points.slice(0, entryIndex + 1).map(toLatLon)
   const reentry = points.slice(entryIndex, splashIndex + 1).map(toLatLon)
   const oceanDrift = points.slice(splashIndex).map(toLatLon)

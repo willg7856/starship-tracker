@@ -8,10 +8,10 @@ import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const MAX_BRIDGE_KM = 1
 
-export function createMap(container) {
+export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
-  let mode = 'drift'
+  let mode = prelaunch || !meta.hasFlightPath ? 'flight' : 'drift'
   let fittedMode = null
   let layers = {
     ascent: null,
@@ -22,7 +22,14 @@ export function createMap(container) {
     shipHalo: null,
     launch: null,
     landing: null,
+    plannedLanding: null,
   }
+
+  const initialCenter = prelaunch
+    ? [meta.launchPad.lat, meta.launchPad.lon]
+    : meta.landingFix
+      ? [meta.landingFix.lat, meta.landingFix.lon]
+      : [meta.launchPad.lat, meta.launchPad.lon]
 
   const map = L.map(container, {
     zoomControl: true,
@@ -32,7 +39,7 @@ export function createMap(container) {
     zoomSnap: 0.1,
     zoomDelta: 0.5,
     scrollWheelZoom: true,
-  }).setView([meta.landingFix.lat, meta.landingFix.lon], 9)
+  }).setView(initialCenter, prelaunch ? 7 : 9)
 
   L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -58,16 +65,39 @@ export function createMap(container) {
     .bindPopup(`<strong>Liftoff</strong><br>${meta.launchPad.label}`)
     .addTo(map)
 
-  layers.ascent = L.polyline(paths.ascent, {
-    color: '#ff5a1f',
-    weight: 3,
-    opacity: 0.95,
-  }).addTo(map)
-  layers.reentry = L.polyline(paths.reentry, {
-    color: '#e64613',
-    weight: 3,
-    opacity: 0.95,
-  }).addTo(map)
+  if (paths.ascent.length >= 2) {
+    layers.ascent = L.polyline(paths.ascent, {
+      color: '#ff5a1f',
+      weight: 3,
+      opacity: 0.95,
+    }).addTo(map)
+  }
+  if (paths.reentry.length >= 2) {
+    layers.reentry = L.polyline(paths.reentry, {
+      color: '#e64613',
+      weight: 3,
+      opacity: 0.95,
+    }).addTo(map)
+  }
+
+  if (prelaunch && meta.landingFix) {
+    layers.plannedLanding = L.marker(
+      [meta.landingFix.lat, meta.landingFix.lon],
+      { icon: landingIcon },
+    )
+      .bindPopup(
+        `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
+          meta.landingFix.lat,
+          meta.landingFix.lon,
+        )}`,
+      )
+      .addTo(map)
+    const bounds = L.latLngBounds([
+      [meta.launchPad.lat, meta.launchPad.lon],
+      [meta.landingFix.lat, meta.landingFix.lon],
+    ])
+    map.fitBounds(bounds.pad(0.2), { animate: false, maxZoom: 4 })
+  }
 
   const shell = container.closest('.map-shell') || container.parentElement
   let toggleEl = shell?.querySelector('.map-view-toggle')
@@ -91,24 +121,28 @@ export function createMap(container) {
       fittedMode = null
     })
   }
+  if (toggleEl && prelaunch) toggleEl.hidden = true
 
   function fit(view, driftPoints, fullPath, live) {
     if (fittedMode === view) return
     fittedMode = view
     if (view === 'drift') {
-      const bounds = L.latLngBounds(
-        driftPoints.length
-          ? driftPoints
-          : [[meta.landingFix.lat, meta.landingFix.lon]],
-      )
-      bounds.extend(live)
+      const anchor = meta.landingFix
+        ? [[meta.landingFix.lat, meta.landingFix.lon]]
+        : [[meta.launchPad.lat, meta.launchPad.lon]]
+      const bounds = L.latLngBounds(driftPoints.length ? driftPoints : anchor)
+      if (live) bounds.extend(live)
       map.fitBounds(bounds.pad(0.35), { animate: false })
       return
     }
     if (fullPath.length >= 2) {
       const bounds = L.latLngBounds(fullPath)
-      bounds.extend(live)
+      if (live) bounds.extend(live)
       map.fitBounds(bounds.pad(0.08), { animate: false })
+      return
+    }
+    if (live) {
+      map.setView(live, Math.max(map.getZoom(), 6), { animate: false })
     }
   }
 
@@ -123,12 +157,22 @@ export function createMap(container) {
 
   return {
     update({ ship, liveTrail = [], spaceNoticesExtension = [] }) {
+      if (!ship?.current) {
+        map.invalidateSize()
+        return
+      }
+
+      if (layers.plannedLanding) {
+        map.removeLayer(layers.plannedLanding)
+        layers.plannedLanding = null
+      }
+
       const current = ship.current
       const live = [current.latitude, current.longitude]
       const landed = isNearSurface(current.altitude)
-      const view = landed ? mode : 'flight'
+      const view = landed && meta.hasFlightPath ? mode : 'flight'
 
-      if (toggleEl) toggleEl.hidden = !landed
+      if (toggleEl) toggleEl.hidden = !(landed && meta.hasFlightPath)
 
       const snExtensionPath = spaceNoticesExtension.map((p) => [
         p.latitude,
@@ -174,8 +218,24 @@ export function createMap(container) {
         }
       }
 
+      // Prefer SpaceX live trajectory when the baked path is still a prelaunch stub.
+      const sxTrajectory = Array.isArray(ship.trajectory) ? ship.trajectory : []
+      if (!meta.hasFlightPath && sxTrajectory.length >= 2) {
+        const sxPath = sxTrajectory
+          .filter(
+            (p) =>
+              Number.isFinite(p.latitude) &&
+              Number.isFinite(p.longitude) &&
+              (p.altitude == null || p.altitude > -500000),
+          )
+          .map((p) => [p.latitude, p.longitude])
+        if (sxPath.length >= 2) fullPath = thinLatLonPath(sxPath)
+      }
+
       const livePath = liveTrail.map((p) => [p.latitude, p.longitude])
-      const driftFrame = [[meta.landingFix.lat, meta.landingFix.lon]]
+      const driftFrame = meta.landingFix
+        ? [[meta.landingFix.lat, meta.landingFix.lon]]
+        : [[meta.launchPad.lat, meta.launchPad.lon]]
       for (const seg of oceanDriftCleanSegments) for (const p of seg) driftFrame.push(p)
       for (const p of livePath) driftFrame.push(p)
       driftFrame.push(live)
@@ -189,6 +249,15 @@ export function createMap(container) {
           opacity: 0.95,
         }).addTo(map)
         layers.drift.push(layer)
+      }
+
+      if (!meta.hasFlightPath && fullPath.length >= 2) {
+        if (layers.ascent) map.removeLayer(layers.ascent)
+        layers.ascent = L.polyline(fullPath, {
+          color: '#ff5a1f',
+          weight: 3,
+          opacity: 0.95,
+        }).addTo(map)
       }
 
       // live tip trail
@@ -226,10 +295,14 @@ export function createMap(container) {
         }
       }
 
-      layers.ascent.setStyle({ opacity: view === 'flight' ? 0.95 : 0.55 })
-      layers.reentry.setStyle({ opacity: view === 'flight' ? 0.95 : 0.55 })
+      if (layers.ascent) {
+        layers.ascent.setStyle({ opacity: view === 'flight' ? 0.95 : 0.55 })
+      }
+      if (layers.reentry) {
+        layers.reentry.setStyle({ opacity: view === 'flight' ? 0.95 : 0.55 })
+      }
 
-      if (landed) {
+      if (landed && meta.landingFix) {
         if (!layers.landing) {
           layers.landing = L.marker(
             [meta.landingFix.lat, meta.landingFix.lon],
@@ -250,6 +323,7 @@ export function createMap(container) {
 
       const radius = view === 'drift' ? 11 : 9
       const halo = view === 'drift' ? 22 : 18
+      const shipLabel = meta.vehicle || 'Ship 41'
       if (!layers.ship) {
         layers.shipHalo = L.circleMarker(live, {
           radius: halo,
@@ -266,14 +340,14 @@ export function createMap(container) {
           weight: 2,
         })
           .bindPopup(
-            `<strong>Ship 40</strong><br>${formatLatLon(live[0], live[1])}`,
+            `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
           )
           .addTo(map)
       } else {
         layers.ship.setLatLng(live)
         layers.ship.setRadius(radius)
         layers.ship.setPopupContent(
-          `<strong>Ship 40</strong><br>${formatLatLon(live[0], live[1])}`,
+          `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}`,
         )
         layers.shipHalo.setLatLng(live)
         layers.shipHalo.setRadius(halo)

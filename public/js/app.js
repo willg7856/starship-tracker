@@ -53,8 +53,8 @@ function renderShell(root) {
               <span class="brand-name">Beyond Stage Zero</span>
             </a>
             <h1 class="masthead-title">
-              Ship 40
-              <span class="masthead-title-meta">· Flight 13</span>
+              Ship 41
+              <span class="masthead-title-meta">· Flight 14</span>
             </h1>
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
@@ -72,11 +72,11 @@ function renderShell(root) {
         </div>
       </header>
 
-      <section class="map-section" aria-label="Ship 40 map">
+      <section class="map-section" aria-label="Ship 41 map">
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
       </section>
 
-      <section class="section telemetry" aria-label="Ship 40 telemetry" hidden>
+      <section class="section telemetry" aria-label="Ship 41 telemetry" hidden>
         <div class="section-inner">
           <div class="telemetry-head">
             <div>
@@ -111,6 +111,12 @@ function liveMissionTime(state, nowMs) {
   if (!current) return null
   const meta = getMeta()
   if (state.positionSource === 'space-notices') {
+    if (
+      typeof meta.splashdownGpsTime !== 'number' ||
+      typeof meta.splashdownMissionTime !== 'number'
+    ) {
+      return current.mission_time
+    }
     const splashMs = gpsTimeToDate(meta.splashdownGpsTime).getTime()
     return meta.splashdownMissionTime + Math.max(0, (nowMs - splashMs) / 1000)
   }
@@ -136,8 +142,13 @@ function renderTelemetry(state, nowMs) {
   document.querySelector('.telemetry-place').textContent = place
 
   let drift = null
-  if (mission != null && isNearSurface(current.altitude)) {
-    const meta = getMeta()
+  const meta = getMeta()
+  if (
+    mission != null &&
+    isNearSurface(current.altitude) &&
+    meta.landingFix &&
+    typeof meta.splashdownMissionTime === 'number'
+  ) {
     const km = haversineKm(
       meta.landingFix.lat,
       meta.landingFix.lon,
@@ -187,9 +198,20 @@ function renderStatus(state, nowMs) {
       Math.max(0, Math.floor((nowMs - state.lastMovedAt.getTime()) / 1000)),
     )}`
     dataState = 'live'
+  } else if (!state.loading && !state.ship?.current) {
+    label = 'Awaiting Flight 14 telemetry'
+    dataState = 'waiting'
   }
   el.textContent = label
   el.dataset.state = dataState
+}
+
+function ensureMap(mapApi, prelaunch) {
+  if (mapApi) return mapApi
+  const mapSection = document.querySelector('.map-section')
+  mapSection.innerHTML =
+    '<div class="map-shell"><div id="track-map" class="track-map"></div></div>'
+  return createMap(document.getElementById('track-map'), { prelaunch })
 }
 
 async function main() {
@@ -204,7 +226,8 @@ async function main() {
     return
   }
 
-  let mapApi = null
+  const meta = getMeta()
+  let mapApi = ensureMap(null, !meta.hasFlightPath)
   let latest = null
 
   const stop = startTracker((state) => {
@@ -213,21 +236,17 @@ async function main() {
     renderStatus(state, nowMs)
     renderTelemetry(state, nowMs)
 
-    const mapSection = document.querySelector('.map-section')
     if (!state.ship?.current) {
-      if (!mapApi) {
-        mapSection.innerHTML = `<div class="map-skeleton"><p>${
-          state.error || 'Acquiring telemetry…'
-        }</p></div>`
-      }
+      mapApi = ensureMap(mapApi, !meta.hasFlightPath)
+      mapApi.update({
+        ship: null,
+        liveTrail: state.liveTrail,
+        spaceNoticesExtension: state.spaceNoticesExtension,
+      })
       return
     }
 
-    if (!mapApi) {
-      mapSection.innerHTML =
-        '<div class="map-shell"><div id="track-map" class="track-map"></div></div>'
-      mapApi = createMap(document.getElementById('track-map'))
-    }
+    mapApi = ensureMap(mapApi, false)
     mapApi.update({
       ship: state.ship,
       liveTrail: state.liveTrail,

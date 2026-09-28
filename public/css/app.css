@@ -211,6 +211,10 @@ select {
   color: var(--signal);
 }
 
+.status-line[data-state='waiting'] {
+  color: var(--warn);
+}
+
 .masthead-actions {
   display: flex;
   flex-wrap: wrap;

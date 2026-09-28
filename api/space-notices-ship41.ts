@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const UPSTREAM =
-  'https://data.space-notices.com/space-notices-data/ship-40'
+  'https://data.space-notices.com/space-notices-data/ship-41'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     if (!upstream.ok) {
       res.status(upstream.status).json({
-        error: `Space Notices ship-40 feed returned ${upstream.status}`,
+        error: `Space Notices ship-41 feed returned ${upstream.status}`,
       })
       return
     }
