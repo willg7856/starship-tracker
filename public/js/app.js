@@ -64,16 +64,6 @@ function renderShell(root) {
           </div>
           <div class="masthead-meta">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
-            <div class="live-readouts" aria-label="Live vehicle telemetry">
-              <div class="live-readout">
-                <span class="live-readout-label">Alt</span>
-                <span class="live-readout-value" data-live="altitude">— <span>km</span></span>
-              </div>
-              <div class="live-readout">
-                <span class="live-readout-label">Spd</span>
-                <span class="live-readout-value" data-live="speed">— <span>km/h</span></span>
-              </div>
-            </div>
             <p class="status-line" data-state="loading">Linking…</p>
             <div class="masthead-actions">
               <button type="button" class="theme-toggle">Dark</button>
@@ -84,6 +74,19 @@ function renderShell(root) {
           </div>
         </div>
       </header>
+
+      <section class="live-hud" aria-label="Live altitude and speed">
+        <div class="live-hud-inner">
+          <div class="live-readout">
+            <span class="live-readout-label">Altitude</span>
+            <span class="live-readout-value" data-live="altitude">— <span>km</span></span>
+          </div>
+          <div class="live-readout">
+            <span class="live-readout-label">Speed</span>
+            <span class="live-readout-value" data-live="speed">— <span>km/h</span></span>
+          </div>
+        </div>
+      </section>
 
       <section class="map-section" aria-label="Starship Flight 14 map">
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
@@ -181,7 +184,7 @@ function renderLiveReadouts(state) {
   const spdEl = document.querySelector('[data-live="speed"]')
   if (!altEl || !spdEl) return
   const current = state?.ship?.current
-  const strip = document.querySelector('.live-readouts')
+  const strip = document.querySelector('.live-hud')
   if (!current) {
     altEl.innerHTML = '— <span>km</span>'
     spdEl.innerHTML = '— <span>km/h</span>'
