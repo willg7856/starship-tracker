@@ -170,40 +170,46 @@ select {
   gap: 0.85rem 1.5rem;
 }
 
-.topbar-lead,
-.topbar-tools {
+.topbar-metrics {
   display: flex;
-  align-items: center;
-  gap: 0.85rem 1.15rem;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.35rem;
   min-width: 0;
 }
 
-.topbar-tools {
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.topbar-name {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--ink-soft);
+.topbar-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
   white-space: nowrap;
 }
 
-.topbar-name span {
-  color: var(--muted);
+.topbar-metric-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
 }
 
-.topbar-name::before {
-  content: "";
-  display: inline-block;
-  width: 1px;
-  height: 0.85rem;
-  margin-right: 1.15rem;
-  background: var(--line);
-  vertical-align: -0.12em;
+.topbar-metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-metric-value span {
+  margin-left: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .masthead-brand-block {
@@ -830,14 +836,9 @@ select {
     align-items: flex-start;
   }
 
-  .topbar-lead,
-  .topbar-tools {
+  .topbar-metrics {
     width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .topbar-name {
-    display: none;
+    justify-content: flex-start;
   }
 
   .masthead-meta {

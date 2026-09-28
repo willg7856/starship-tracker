@@ -50,25 +50,21 @@ function renderShell(root) {
     <div class="app">
       <header class="topbar">
         <div class="topbar-inner">
-          <div class="topbar-lead">
-            <a class="powered-by" href="https://www.beyondstagezero.com/">
-              <span class="brand-mark" aria-hidden="true"></span>
-              Powered by Beyond Stage Zero
-            </a>
-            <span class="topbar-name">Live Starship Tracking <span>Flight 14</span></span>
-          </div>
-          <div class="topbar-tools">
+          <a class="powered-by" href="https://www.beyondstagezero.com/">
+            <span class="brand-mark" aria-hidden="true"></span>
+            Powered by Beyond Stage Zero
+          </a>
+          <div class="topbar-metrics">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
-            <p class="status-line" data-state="loading">Linking…</p>
-            <div class="masthead-actions">
-              <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
-                Watch
-              </button>
-              <button type="button" class="theme-toggle">Dark</button>
-              <a class="masthead-link" href="${SPACEX_VEHICLE_TRACKER}" target="_blank" rel="noreferrer">
-                SpaceX tracker
-              </a>
+            <div class="topbar-metric">
+              <span class="topbar-metric-label">Altitude</span>
+              <span class="topbar-metric-value" data-live="altitude">— <span>km</span></span>
             </div>
+            <div class="topbar-metric">
+              <span class="topbar-metric-label">Speed</span>
+              <span class="topbar-metric-value" data-live="speed">— <span>km/h</span></span>
+            </div>
+            <p class="status-line" data-state="loading">Updated —</p>
           </div>
         </div>
       </header>
@@ -83,21 +79,17 @@ function renderShell(root) {
               Live location from SpaceX's public vehicle tracker.
             </p>
           </div>
+          <div class="masthead-actions">
+            <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
+              Watch
+            </button>
+            <button type="button" class="theme-toggle">Dark</button>
+            <a class="masthead-link" href="${SPACEX_VEHICLE_TRACKER}" target="_blank" rel="noreferrer">
+              SpaceX tracker
+            </a>
+          </div>
         </div>
       </header>
-
-      <section class="live-hud" aria-label="Live altitude and speed">
-        <div class="live-hud-inner">
-          <div class="live-readout">
-            <span class="live-readout-label">Altitude</span>
-            <span class="live-readout-value" data-live="altitude">— <span>km</span></span>
-          </div>
-          <div class="live-readout">
-            <span class="live-readout-label">Speed</span>
-            <span class="live-readout-value" data-live="speed">— <span>km/h</span></span>
-          </div>
-        </div>
-      </section>
 
       <section class="livestream" id="livestream" aria-label="Flight 14 livestream" hidden>
         <div class="livestream-inner">
@@ -259,16 +251,13 @@ function renderLiveReadouts(state) {
   const spdEl = document.querySelector('[data-live="speed"]')
   if (!altEl || !spdEl) return
   const current = state?.ship?.current
-  const strip = document.querySelector('.live-hud')
   if (!current) {
     altEl.innerHTML = '— <span>km</span>'
     spdEl.innerHTML = '— <span>km/h</span>'
-    if (strip) strip.dataset.state = 'waiting'
     return
   }
   altEl.innerHTML = `${formatAltitudeKm(current.altitude)} <span>km</span>`
   spdEl.innerHTML = `${formatSpeedKmh(current.speed)} <span>km/h</span>`
-  if (strip) strip.dataset.state = 'live'
 }
 
 function renderTelemetry(state) {
@@ -294,26 +283,19 @@ function renderTelemetry(state) {
 
 function renderStatus(state, nowMs) {
   const el = document.querySelector('.status-line')
-  let label = 'Linking…'
+  let label = 'Updated —'
   let dataState = 'loading'
+  const updatedAt = state.fetchedAt || state.lastMovedAt
   if (state.error) {
     label = 'Offline'
     dataState = 'error'
-  } else if (!state.loading && state.positionSource === 'spacex' && state.ship?.current) {
-    const ageS = Math.max(
-      0,
-      Math.floor((nowMs - (state.fetchedAt?.getTime?.() ?? nowMs)) / 1000),
-    )
-    label =
-      ageS < 20 ? 'Live from SpaceX' : `Live from SpaceX · ${formatUpdateAge(ageS)}`
-    dataState = 'live'
-  } else if (!state.loading && state.lastMovedAt) {
+  } else if (!state.loading && updatedAt) {
     label = `Updated ${formatUpdateAge(
-      Math.max(0, Math.floor((nowMs - state.lastMovedAt.getTime()) / 1000)),
+      Math.max(0, Math.floor((nowMs - updatedAt.getTime()) / 1000)),
     )}`
     dataState = 'live'
   } else if (!state.loading && !state.ship?.current) {
-    label = 'Awaiting Flight 14 telemetry'
+    label = 'Updated —'
     dataState = 'waiting'
   }
   el.textContent = label
