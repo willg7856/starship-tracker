@@ -134,13 +134,28 @@ function orbitalSpeedMs(flight) {
   return dists[Math.floor(dists.length / 2)] / 30
 }
 
-function segmentSeconds(a, b, speedMs) {
-  const meters = ecefDistanceMeters(a, b)
-  const fast = a.alt > 150_000 && b.alt > 150_000
-  if (fast || meters / 30 > 6000) {
-    return Math.min(120, Math.max(5, meters / speedMs))
+/**
+ * Tracker fixes arrive about every 30s. An isolated step much longer than both
+ * neighbors is a late fix, not a burst of speed, so that gap gets more time.
+ */
+function segmentDurations(flight) {
+  const dists = []
+  for (let i = 1; i < flight.length; i++) {
+    dists.push(ecefDistanceMeters(flight[i - 1], flight[i]))
   }
-  return 30
+  const nominal = 30
+  return dists.map((d, i) => {
+    const prev = dists[i - 1]
+    const next = dists[i + 1]
+    if (prev > 0 && next > 0) {
+      const neighbor = (prev + next) / 2
+      const stable = Math.abs(prev - next) / neighbor < 0.25
+      if (stable && d > neighbor * 1.2) {
+        return Math.min(120, nominal * (d / neighbor))
+      }
+    }
+    return nominal
+  })
 }
 
 /**
@@ -189,10 +204,7 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
   if (flight.length < 2) return []
 
   const speedMs = orbitalSpeedMs(flight)
-  const segs = []
-  for (let i = 1; i < flight.length; i++) {
-    segs.push(segmentSeconds(flight[i - 1], flight[i], speedMs))
-  }
+  const segs = segmentDurations(flight)
   let span = segs.reduce((sum, dt) => sum + dt, 0)
   const tipGapKm = haversineKm(
     flight[flight.length - 1].lat,
@@ -230,6 +242,7 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
       latitude: pad.lat,
       longitude: pad.lon,
       altitude: 0,
+      r_ecef: ecefMeters(pad.lat, pad.lon, 0),
     })
   }
   points.push({
@@ -237,6 +250,7 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
     latitude: flight[0].lat,
     longitude: flight[0].lon,
     altitude: flight[0].alt,
+    r_ecef: ecefMeters(flight[0].lat, flight[0].lon, flight[0].alt),
   })
   for (let i = 1; i < flight.length; i++) {
     t += segs[i - 1]
@@ -245,6 +259,7 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
       latitude: flight[i].lat,
       longitude: flight[i].lon,
       altitude: flight[i].alt,
+      r_ecef: ecefMeters(flight[i].lat, flight[i].lon, flight[i].alt),
     })
   }
   return points
