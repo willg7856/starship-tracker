@@ -23,6 +23,7 @@
   --radius: 0;
   --max: 1180px;
   --masthead-pad-x: clamp(1.1rem, 3.5vw, 2.25rem);
+  --topbar-h: 3.15rem;
   color: var(--ink);
   background: var(--paper);
   font-family: var(--font-body);
@@ -87,6 +88,7 @@ select {
 
 .app {
   min-height: 100vh;
+  padding-top: var(--topbar-h);
   display: flex;
   flex-direction: column;
 }
@@ -147,32 +149,80 @@ select {
   gap: 1.25rem 2rem;
 }
 
+.topbar {
+  position: fixed;
+  z-index: 4000;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.topbar-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0.55rem var(--masthead-pad-x);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.5rem;
+}
+
+.topbar-lead,
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem 1.15rem;
+  min-width: 0;
+}
+
+.topbar-tools {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.topbar-name {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.topbar-name span {
+  color: var(--muted);
+}
+
+.topbar-name::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 0.85rem;
+  margin-right: 1.15rem;
+  background: var(--line);
+  vertical-align: -0.12em;
+}
+
 .masthead-brand-block {
   display: grid;
   gap: 0.4rem;
   max-width: 42rem;
-  /* Room for the fixed credit, which used to sit in this spot. */
-  padding-top: 1.7rem;
 }
 
 .powered-by {
-  position: fixed;
-  z-index: 4000;
-  top: clamp(1.35rem, 3.2vw, 2rem);
-  left: max(var(--masthead-pad-x), calc((100vw - var(--max)) / 2));
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.28rem 0.55rem 0.28rem 0.4rem;
-  border: 1px solid var(--line);
-  background: var(--masthead-bg);
-  backdrop-filter: blur(8px);
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 500;
   letter-spacing: 0.04em;
   line-height: 1;
+  white-space: nowrap;
   text-decoration: none;
 }
 
@@ -225,12 +275,13 @@ select {
 .mission-clock {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: clamp(1.35rem, 3.2vw, 1.85rem);
+  font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  line-height: 1.05;
+  line-height: 1;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .mission-clock[data-phase='prelaunch'] {
@@ -774,6 +825,21 @@ select {
 }
 
 @media (max-width: 720px) {
+  .topbar-inner {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .topbar-lead,
+  .topbar-tools {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .topbar-name {
+    display: none;
+  }
+
   .masthead-meta {
     justify-items: start;
     text-align: left;

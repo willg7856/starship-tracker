@@ -48,22 +48,16 @@ function setTheme(theme) {
 function renderShell(root) {
   root.innerHTML = `
     <div class="app">
-      <a class="powered-by" href="https://www.beyondstagezero.com/">
-        <span class="brand-mark" aria-hidden="true"></span>
-        Powered by Beyond Stage Zero
-      </a>
-      <header class="masthead">
-        <div class="masthead-inner">
-          <div class="masthead-brand-block">
-            <h1 class="masthead-title">
-              Live Starship Tracking
-              <span class="masthead-title-meta">Flight 14</span>
-            </h1>
-            <p class="masthead-sub">
-              Live location from SpaceX's public vehicle tracker.
-            </p>
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="topbar-lead">
+            <a class="powered-by" href="https://www.beyondstagezero.com/">
+              <span class="brand-mark" aria-hidden="true"></span>
+              Powered by Beyond Stage Zero
+            </a>
+            <span class="topbar-name">Live Starship Tracking <span>Flight 14</span></span>
           </div>
-          <div class="masthead-meta">
+          <div class="topbar-tools">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
             <p class="status-line" data-state="loading">Linking…</p>
             <div class="masthead-actions">
@@ -75,6 +69,19 @@ function renderShell(root) {
                 SpaceX tracker
               </a>
             </div>
+          </div>
+        </div>
+      </header>
+      <header class="masthead">
+        <div class="masthead-inner">
+          <div class="masthead-brand-block">
+            <h1 class="masthead-title">
+              Live Starship Tracking
+              <span class="masthead-title-meta">Flight 14</span>
+            </h1>
+            <p class="masthead-sub">
+              Live location from SpaceX's public vehicle tracker.
+            </p>
           </div>
         </div>
       </header>
@@ -166,6 +173,13 @@ function renderShell(root) {
   livestream.querySelector('.livestream-close').addEventListener('click', () => {
     setLivestreamOpen(false)
   })
+
+  const topbar = document.querySelector('.topbar')
+  const syncTopbar = () => {
+    document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`)
+  }
+  syncTopbar()
+  window.addEventListener('resize', syncTopbar)
 }
 
 function liveMissionTime(state, nowMs) {
