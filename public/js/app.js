@@ -117,6 +117,10 @@ function renderShell(root) {
           </a>
           <div class="topbar-metrics">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
+            <div class="topbar-metric since-landing" hidden>
+              <span class="topbar-metric-label">Since landing</span>
+              <span class="topbar-metric-value" data-live="since-landing">0:00:00</span>
+            </div>
             <div class="topbar-metric">
               <span class="topbar-metric-label">Altitude</span>
               <span class="topbar-metric-value" data-live="altitude">— <span>km</span></span>
@@ -615,6 +619,54 @@ function missionOffsetSeconds(state, nowMs) {
   return Math.min(0, (nowMs - planned) / 1000)
 }
 
+function formatDuration(seconds) {
+  const total = Math.floor(Math.max(0, seconds))
+  const days = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const clock = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return days > 0 ? `${days}d ${clock}` : clock
+}
+
+/** Seconds after the frozen landing mark. Counts up while T+ stays put. */
+function secondsSinceLanding(state, nowMs) {
+  if (landedElapsedSeconds == null) return null
+  let liftoffMs = null
+  try {
+    const actual = getMeta().actualLiftoffMs
+    if (typeof actual === 'number') liftoffMs = actual
+  } catch {
+    liftoffMs = null
+  }
+  const current = state?.ship?.current
+  if (
+    liftoffMs == null &&
+    current &&
+    Number.isFinite(current.gps_time) &&
+    Number.isFinite(current.mission_time) &&
+    current.mission_time > 1
+  ) {
+    liftoffMs = (current.gps_time - current.mission_time + GPS_TO_UNIX_OFFSET) * 1000
+  }
+  if (liftoffMs == null) return null
+  return Math.max(0, (nowMs - liftoffMs) / 1000 - landedElapsedSeconds)
+}
+
+function renderSinceLanding(state, nowMs, landed) {
+  const el = document.querySelector('.since-landing')
+  const value = document.querySelector('[data-live="since-landing"]')
+  if (!el || !value) return
+  const since = landed ? secondsSinceLanding(state, nowMs) : null
+  if (since == null) {
+    el.hidden = true
+    return
+  }
+  el.hidden = false
+  value.textContent = formatDuration(since)
+  el.setAttribute('aria-label', `Time since Starship landed, ${value.textContent}`)
+}
+
 function renderMissionClock(state, nowMs) {
   const el = document.querySelector('.mission-clock')
   if (!el) return
@@ -636,6 +688,7 @@ function renderMissionClock(state, nowMs) {
           ? 'Holding at T-0 until Starship leaves the pad'
           : 'Countdown to planned liftoff',
   )
+  renderSinceLanding(state, nowMs, clockStopped)
 }
 
 function renderLiveReadouts(state) {
