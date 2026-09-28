@@ -197,7 +197,7 @@ select {
 
 .topbar-metric-value {
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 1.85rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -281,7 +281,7 @@ select {
 .mission-clock {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 1.85rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
