@@ -74,6 +74,19 @@ export function setPlannedLiftoffMs(ms) {
   return true
 }
 
+/** Official liftoff from SpaceX mission elapsed time, once the ship is in flight. */
+export function setActualLiftoffMs(ms) {
+  if (!meta || !Number.isFinite(ms)) return false
+  if (
+    typeof meta.actualLiftoffMs === 'number' &&
+    Math.abs(meta.actualLiftoffMs - ms) < 5000
+  ) {
+    return false
+  }
+  meta.actualLiftoffMs = ms
+  return true
+}
+
 export function getFlightTrack() {
   return track.points || []
 }
