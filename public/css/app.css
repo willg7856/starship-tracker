@@ -151,12 +151,22 @@ select {
   display: grid;
   gap: 0.4rem;
   max-width: 42rem;
+  /* Room for the fixed credit, which used to sit in this spot. */
+  padding-top: 1.7rem;
 }
 
 .powered-by {
+  position: fixed;
+  z-index: 4000;
+  top: clamp(1.35rem, 3.2vw, 2rem);
+  left: max(var(--masthead-pad-x), calc((100vw - var(--max)) / 2));
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  padding: 0.28rem 0.55rem 0.28rem 0.4rem;
+  border: 1px solid var(--line);
+  background: var(--masthead-bg);
+  backdrop-filter: blur(8px);
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.72rem;
