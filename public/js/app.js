@@ -12,7 +12,6 @@ import {
   formatSignedMissionClock,
   formatSpeedKmh,
   formatUpdateAge,
-  gpsTimeToDate,
 } from './utils.js'
 
 const THEME_KEY = 'bsz-theme'
@@ -22,11 +21,32 @@ const SPACEX_WEBCAST =
 const LIVESTREAM_EMBED =
   'https://www.youtube-nocookie.com/embed/CxHNK4UeVP4?rel=0&modestbranding=1'
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
-/** Clear of the pad + climbing — SpaceX often ticks mission_time on the pad. */
-const LIFTOFF_ALT_M = 1500
-const LIFTOFF_SPEED_MS = 80
-const PAD_RADIUS_DEG = 0.08
+/**
+ * Movement off the pad, not the planned clock. SpaceX mission_time already
+ * ticks while Ship 41 is sitting at Starbase, so T+ starts only after we
+ * see the ship leave.
+ */
+const MOVE_ALT_M = 200
+const MOVE_SPEED_MS = 10
+const MOVE_RANGE_KM = 0.15
+const LIFTOFF_AT_KEY = 'bsz-flight14-liftoff-ms'
 let chartsPainted = false
+let liftoffAtMs = readLiftoffAt()
+let liftoffConfirmed = liftoffAtMs != null
+let sawOnPad = false
+let moveStreak = 0
+let firstMoveAtMs = null
+let lastSampleKey = null
+let samplesSeen = 0
+
+function readLiftoffAt() {
+  try {
+    const n = Number(sessionStorage.getItem(LIFTOFF_AT_KEY))
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
 
 function getTheme() {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -357,62 +377,106 @@ function embedFromLivestreamUrl(raw) {
   return null
 }
 
-function liveMissionTime(state, nowMs) {
-  const current = state.ship?.current
+function sampleKey(state) {
+  const current = state?.ship?.current
   if (!current) return null
-  const meta = getMeta()
-  if (state.positionSource === 'space-notices') {
-    if (
-      typeof meta.splashdownGpsTime !== 'number' ||
-      typeof meta.splashdownMissionTime !== 'number'
-    ) {
-      return current.mission_time
+  return [current.gps_time, current.altitude, current.speed, current.latitude, current.longitude].join('|')
+}
+
+/** True once the live fix is no longer pad GPS noise. */
+function startedToMove(state) {
+  const current = state?.ship?.current
+  if (!current) return false
+  const { altitude, speed, latitude, longitude } = current
+  if (Number.isFinite(speed) && speed >= MOVE_SPEED_MS) return true
+  if (
+    Number.isFinite(altitude) &&
+    altitude >= MOVE_ALT_M &&
+    altitude < 600_000
+  ) {
+    return true
+  }
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    const pad = getMeta().launchPad
+    if (haversineKm(pad.lat, pad.lon, latitude, longitude) >= MOVE_RANGE_KM) {
+      return true
     }
-    const splashMs = gpsTimeToDate(meta.splashdownGpsTime).getTime()
-    return meta.splashdownMissionTime + Math.max(0, (nowMs - splashMs) / 1000)
   }
-  if (!state.fetchedAt) return current.mission_time
-  const elapsedS = Math.max(0, (nowMs - state.fetchedAt.getTime()) / 1000)
-  return current.mission_time + elapsedS
-}
-
-function isNearPad(lat, lon) {
-  const pad = getMeta().launchPad
-  return (
-    Number.isFinite(lat) &&
-    Number.isFinite(lon) &&
-    Math.abs(lat - pad.lat) < PAD_RADIUS_DEG &&
-    Math.abs(lon - pad.lon) < PAD_RADIUS_DEG
-  )
-}
-
-/**
- * True only once the vehicle has clearly left the pad. Pad telemetry often
- * publishes a ticking mission_time / low altitude before Flight 14 liftoff.
- */
-function hasLiftoff(state) {
-  if (!state?.ship?.current) return false
-  const { altitude, speed, latitude, longitude } = state.ship.current
-  const onPad = isNearPad(latitude, longitude)
-  if (onPad && !(Number.isFinite(altitude) && altitude > LIFTOFF_ALT_M)) {
-    return false
-  }
-  if (Number.isFinite(altitude) && altitude > LIFTOFF_ALT_M) return true
-  if (Number.isFinite(speed) && speed > LIFTOFF_SPEED_MS) return true
   return false
 }
 
+function clearStoredLiftoff() {
+  liftoffAtMs = null
+  liftoffConfirmed = false
+  try {
+    sessionStorage.removeItem(LIFTOFF_AT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function confirmLiftoff(atMs) {
+  liftoffAtMs = atMs
+  liftoffConfirmed = true
+  try {
+    sessionStorage.setItem(LIFTOFF_AT_KEY, String(atMs))
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * Seconds from liftoff: negative before launch (T-), positive after (T+).
+ * Watch live fixes. T+ starts only after two moving samples, and only if we
+ * already saw the ship sitting on the pad. A page opened mid-flight keeps
+ * counting from the planned liftoff instead.
+ */
+function observePad(state, nowMs) {
+  const key = sampleKey(state)
+  if (!state?.ship?.current || key == null || key === lastSampleKey) return
+  lastSampleKey = key
+  samplesSeen += 1
+  const moving = startedToMove(state)
+
+  if (samplesSeen === 1 && !moving) {
+    sawOnPad = true
+    clearStoredLiftoff()
+    return
+  }
+  if (liftoffConfirmed) return
+  if (!moving) {
+    sawOnPad = true
+    moveStreak = 0
+    firstMoveAtMs = null
+    return
+  }
+  if (!sawOnPad) return
+  if (moveStreak === 0) firstMoveAtMs = nowMs
+  moveStreak += 1
+  if (moveStreak >= 2) confirmLiftoff(firstMoveAtMs ?? nowMs)
+}
+
+/** Still on the countdown, including a frozen T- 0:00:00 after the planned time. */
+function holdingCountdown(state) {
+  if (liftoffConfirmed) return false
+  if (startedToMove(state) && !sawOnPad && samplesSeen > 0) return false
+  return true
+}
+
+/**
+ * Seconds from liftoff: negative before launch (T-), zero while held, positive after (T+).
  */
 function missionOffsetSeconds(state, nowMs) {
-  if (hasLiftoff(state)) {
-    const mission = liveMissionTime(state, nowMs)
-    return Math.max(0, mission ?? 0)
+  observePad(state, nowMs)
+  if (liftoffConfirmed && liftoffAtMs != null) {
+    return Math.max(0, (nowMs - liftoffAtMs) / 1000)
   }
   const planned = getMeta().plannedLiftoffMs
+  if (!holdingCountdown(state)) {
+    if (typeof planned !== 'number') return 0
+    return Math.max(0, (nowMs - planned) / 1000)
+  }
   if (typeof planned !== 'number') return null
-  // Hold at T- 0:00:00 once past the window open without confirmed liftoff.
+  // Hold at T- 0:00:00 once the planned time passes without movement off the pad.
   return Math.min(0, (nowMs - planned) / 1000)
 }
 
@@ -420,12 +484,19 @@ function renderMissionClock(state, nowMs) {
   const el = document.querySelector('.mission-clock')
   if (!el) return
   const offset = missionOffsetSeconds(state, nowMs)
-  const launched = hasLiftoff(state)
-  el.textContent = formatSignedMissionClock(offset ?? 0)
+  const launched = !holdingCountdown(state)
+  const holding =
+    !launched && typeof offset === 'number' && offset === 0
+  el.textContent = formatSignedMissionClock(offset ?? 0, launched ? 'T+' : 'T-')
   el.dataset.phase = launched ? 'flight' : 'prelaunch'
+  el.dataset.hold = holding ? 'true' : 'false'
   el.setAttribute(
     'aria-label',
-    launched ? 'Mission elapsed time' : 'Countdown to planned liftoff',
+    launched
+      ? 'Mission elapsed time'
+      : holding
+        ? 'Holding at T-0 until Starship leaves the pad'
+        : 'Countdown to planned liftoff',
   )
 }
 
