@@ -72,15 +72,19 @@ function formatElapsed(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-function niceMax(value, floor) {
+function niceMax(value, floor, fine) {
   const span = Math.max(value, floor)
+  if (!(span > 0) || !Number.isFinite(span)) return Math.max(floor, 1)
   const pow = 10 ** Math.floor(Math.log10(span))
   const n = span / pow
-  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10
+  // Speed peaks near 28,000. The coarse steps round that to 50,000 and leave
+  // the coast floating in the middle of an empty chart.
+  const steps = fine ? [1, 2, 3, 4, 5, 6, 8, 10] : [1, 2, 5, 10]
+  const step = steps.find((s) => n <= s + 1e-9) ?? 10
   return step * pow
 }
 
-function drawChart(canvas, points, { color, formatY, yFloor, timeOrigin = null, domainStart = null }) {
+function drawChart(canvas, points, { color, formatY, yFloor, timeOrigin = null, domainStart = null, fineScale = false }) {
   if (!points.length) return
   const parent = canvas.parentElement
   const width = Math.max(280, parent?.clientWidth || 320)
@@ -107,7 +111,7 @@ function drawChart(canvas, points, { color, formatY, yFloor, timeOrigin = null, 
   const plotH = height - pad.t - pad.b
 
   const values = points.map((p) => p.v)
-  const maxV = niceMax(Math.max(0, ...values), yFloor)
+  const maxV = niceMax(Math.max(0, ...values), yFloor, fineScale)
   const t0 = domainStart ?? points[0].t
   const t1 = points[points.length - 1].t
   const span = Math.max(t1 - t0, 1)
@@ -157,6 +161,8 @@ function drawChart(canvas, points, { color, formatY, yFloor, timeOrigin = null, 
   xy.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
   ctx.strokeStyle = color
   ctx.lineWidth = 2
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
   ctx.stroke()
 
   const tip = xy[xy.length - 1]
@@ -176,7 +182,13 @@ function liftoffGpsSeconds() {
   }
 }
 
-/** Speed between every recorded fix, so the graph is the tracked flight not a flat zero. */
+/**
+ * Fixes are about 30s apart, and a single short or long step reads as a
+ * multi-thousand km/h jump. Those jumps land on nearly the same x pixel, so
+ * the stroke scribbles. Plot speed over the surrounding few fixes instead.
+ */
+const SPEED_WINDOW_S = 150
+
 function speedSeriesKmH() {
   let trail = []
   try {
@@ -184,11 +196,23 @@ function speedSeriesKmH() {
   } catch {
     trail = []
   }
+  const half = SPEED_WINDOW_S / 2
   const points = []
-  for (let i = 1; i < trail.length; i++) {
-    const spd = speedBetweenFixes(trail[i - 1], trail[i])
+  for (let i = 0; i < trail.length; i++) {
+    const t = trail[i].gps_time
+    if (!Number.isFinite(t)) continue
+    let a = i
+    let b = i
+    while (a > 0 && t - trail[a - 1].gps_time <= half) a--
+    while (b < trail.length - 1 && trail[b + 1].gps_time - t <= half) b++
+    if (a === b) {
+      if (i > 0) a = i - 1
+      else if (i < trail.length - 1) b = i + 1
+      else continue
+    }
+    const spd = speedBetweenFixes(trail[a], trail[b])
     if (!Number.isFinite(spd)) continue
-    points.push({ t: trail[i].gps_time, v: spd * 3.6 })
+    points.push({ t, v: spd * 3.6 })
   }
   if (points.length) {
     const first = trail[0]
@@ -308,6 +332,7 @@ export function drawTelemetryCharts() {
     {
       color: spdColor,
       yFloor: 10,
+      fineScale: true,
       formatY: (v) => `${Math.round(v).toLocaleString('en-US')}`,
       timeOrigin: liftoffGps,
       domainStart: coversFlight ? liftoffGps : null,
