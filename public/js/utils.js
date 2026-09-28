@@ -39,13 +39,21 @@ export function formatBearingCardinal(deg) {
 
 export function formatMissionClock(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return 'T+ 0:00:00'
-  const total = Math.floor(seconds)
+  return formatSignedMissionClock(seconds, 'T+')
+}
+
+/** Format a T- / T+ clock. `secondsFromLiftoff` is negative before liftoff. */
+export function formatSignedMissionClock(secondsFromLiftoff, forceSign) {
+  if (!Number.isFinite(secondsFromLiftoff)) return 'T- —'
+  const sign =
+    forceSign || (secondsFromLiftoff < 0 ? 'T-' : 'T+')
+  const total = Math.floor(Math.abs(secondsFromLiftoff))
   const days = Math.floor(total / 86400)
   const h = Math.floor((total % 86400) / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
   const clock = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  return days > 0 ? `T+ ${days}D ${clock}` : `T+ ${clock}`
+  return days > 0 ? `${sign} ${days}D ${clock}` : `${sign} ${clock}`
 }
 
 export function formatSpeedKmh(speedMs) {
@@ -73,8 +81,11 @@ export function formatLatLon(lat, lon) {
 
 export function describeLocation(lat, lon, altitudeM) {
   const nearSurface = altitudeM > -500 && altitudeM < 2000
-  if (lat < 0 && lon > 90 && lon < 130 && nearSurface) {
-    return 'Indian Ocean splashdown zone'
+  if (lat < -10 && lon < -80 && lon > -160 && nearSurface) {
+    return 'Pacific Ocean splashdown zone'
+  }
+  if (lat < 0 && lon > 70 && lon < 130 && nearSurface) {
+    return 'Indian Ocean contingency zone'
   }
   if (Math.abs(lat - 25.997) < 0.5 && Math.abs(lon + 97.158) < 0.5) {
     return 'Starbase, Texas'

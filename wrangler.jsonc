@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "ship-40-tracker",
+  "name": "ship-41-tracker",
   "account_id": "e7c94b9e0e9c735313456b00fea7168f",
   "main": "./worker/index.ts",
   "compatibility_date": "2026-07-26",

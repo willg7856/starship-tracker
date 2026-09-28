@@ -10,7 +10,7 @@ import {
   formatDriftDistance,
   formatDriftDuration,
   formatLatLon,
-  formatMissionClock,
+  formatSignedMissionClock,
   formatSpeedKmh,
   formatUpdateAge,
   gpsTimeToDate,
@@ -19,6 +19,8 @@ import {
 } from './utils.js'
 
 const THEME_KEY = 'bsz-theme'
+/** Mission time above this means liftoff is confirmed from telemetry. */
+const LIFTOFF_MISSION_S = 2
 
 function getTheme() {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -53,14 +55,15 @@ function renderShell(root) {
               <span class="brand-name">Beyond Stage Zero</span>
             </a>
             <h1 class="masthead-title">
-              Ship 40
-              <span class="masthead-title-meta">· Flight 13</span>
+              Starship Tracker
+              <span class="masthead-title-meta">· Flight 14</span>
             </h1>
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
             </p>
           </div>
           <div class="masthead-meta">
+            <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
             <p class="status-line" data-state="loading">Linking…</p>
             <div class="masthead-actions">
               <button type="button" class="theme-toggle">Dark</button>
@@ -72,11 +75,24 @@ function renderShell(root) {
         </div>
       </header>
 
-      <section class="map-section" aria-label="Ship 40 map">
+      <section class="live-hud" aria-label="Live altitude and speed">
+        <div class="live-hud-inner">
+          <div class="live-readout">
+            <span class="live-readout-label">Altitude</span>
+            <span class="live-readout-value" data-live="altitude">— <span>km</span></span>
+          </div>
+          <div class="live-readout">
+            <span class="live-readout-label">Speed</span>
+            <span class="live-readout-value" data-live="speed">— <span>km/h</span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="map-section" aria-label="Starship Flight 14 map">
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
       </section>
 
-      <section class="section telemetry" aria-label="Ship 40 telemetry" hidden>
+      <section class="section telemetry" aria-label="Starship telemetry" hidden>
         <div class="section-inner">
           <div class="telemetry-head">
             <div>
@@ -111,12 +127,73 @@ function liveMissionTime(state, nowMs) {
   if (!current) return null
   const meta = getMeta()
   if (state.positionSource === 'space-notices') {
+    if (
+      typeof meta.splashdownGpsTime !== 'number' ||
+      typeof meta.splashdownMissionTime !== 'number'
+    ) {
+      return current.mission_time
+    }
     const splashMs = gpsTimeToDate(meta.splashdownGpsTime).getTime()
     return meta.splashdownMissionTime + Math.max(0, (nowMs - splashMs) / 1000)
   }
   if (!state.fetchedAt) return current.mission_time
   const elapsedS = Math.max(0, (nowMs - state.fetchedAt.getTime()) / 1000)
   return current.mission_time + elapsedS
+}
+
+function hasLiftoff(state, mission) {
+  if (!state?.ship?.current) return false
+  if (Number.isFinite(mission) && mission >= LIFTOFF_MISSION_S) return true
+  const alt = state.ship.current.altitude
+  const speed = state.ship.current.speed
+  return (
+    (Number.isFinite(alt) && alt > 500) ||
+    (Number.isFinite(speed) && speed > 20)
+  )
+}
+
+/**
+ * Seconds from liftoff: negative before launch (T-), positive after (T+).
+ */
+function missionOffsetSeconds(state, nowMs) {
+  const mission = liveMissionTime(state, nowMs)
+  if (hasLiftoff(state, mission)) {
+    return Math.max(0, mission ?? 0)
+  }
+  const planned = getMeta().plannedLiftoffMs
+  if (typeof planned !== 'number') return null
+  // Hold at T- 0:00:00 once past the window open without confirmed liftoff.
+  return Math.min(0, (nowMs - planned) / 1000)
+}
+
+function renderMissionClock(state, nowMs) {
+  const el = document.querySelector('.mission-clock')
+  if (!el) return
+  const offset = missionOffsetSeconds(state, nowMs)
+  const launched = hasLiftoff(state, liveMissionTime(state, nowMs))
+  el.textContent = formatSignedMissionClock(offset ?? 0)
+  el.dataset.phase = launched ? 'flight' : 'prelaunch'
+  el.setAttribute(
+    'aria-label',
+    launched ? 'Mission elapsed time' : 'Countdown to planned liftoff',
+  )
+}
+
+function renderLiveReadouts(state) {
+  const altEl = document.querySelector('[data-live="altitude"]')
+  const spdEl = document.querySelector('[data-live="speed"]')
+  if (!altEl || !spdEl) return
+  const current = state?.ship?.current
+  const strip = document.querySelector('.live-hud')
+  if (!current) {
+    altEl.innerHTML = '— <span>km</span>'
+    spdEl.innerHTML = '— <span>km/h</span>'
+    if (strip) strip.dataset.state = 'waiting'
+    return
+  }
+  altEl.innerHTML = `${formatAltitudeKm(current.altitude)} <span>km</span>`
+  spdEl.innerHTML = `${formatSpeedKmh(current.speed)} <span>km/h</span>`
+  if (strip) strip.dataset.state = 'live'
 }
 
 function renderTelemetry(state, nowMs) {
@@ -136,8 +213,13 @@ function renderTelemetry(state, nowMs) {
   document.querySelector('.telemetry-place').textContent = place
 
   let drift = null
-  if (mission != null && isNearSurface(current.altitude)) {
-    const meta = getMeta()
+  const meta = getMeta()
+  if (
+    mission != null &&
+    isNearSurface(current.altitude) &&
+    meta.landingFix &&
+    typeof meta.splashdownMissionTime === 'number'
+  ) {
     const km = haversineKm(
       meta.landingFix.lat,
       meta.landingFix.lon,
@@ -163,9 +245,6 @@ function renderTelemetry(state, nowMs) {
   grid.classList.toggle('with-drift', Boolean(drift))
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
-    <div><dt>Mission clock</dt><dd>${formatMissionClock(mission ?? current.mission_time)}</dd></div>
-    <div><dt>Speed</dt><dd>${formatSpeedKmh(current.speed)} <span>km/h</span></dd></div>
-    <div><dt>Altitude</dt><dd>${formatAltitudeKm(current.altitude)} <span>km</span></dd></div>
     ${
       drift
         ? `<div><dt>Ocean drift</dt><dd>${drift.label} <span>${drift.direction}</span></dd></div>
@@ -187,9 +266,26 @@ function renderStatus(state, nowMs) {
       Math.max(0, Math.floor((nowMs - state.lastMovedAt.getTime()) / 1000)),
     )}`
     dataState = 'live'
+  } else if (!state.loading && !state.ship?.current) {
+    label = 'Awaiting Flight 14 telemetry'
+    dataState = 'waiting'
   }
   el.textContent = label
   el.dataset.state = dataState
+}
+
+function ensureMap(mapApi, prelaunch) {
+  const mapSection = document.querySelector('.map-section')
+  const needsCreate =
+    !mapApi ||
+    (mapApi.prelaunch && !prelaunch) ||
+    !document.getElementById('track-map')
+  if (!needsCreate) return mapApi
+  mapSection.innerHTML =
+    '<div class="map-shell"><div id="track-map" class="track-map"></div></div>'
+  const next = createMap(document.getElementById('track-map'), { prelaunch })
+  next.prelaunch = prelaunch
+  return next
 }
 
 async function main() {
@@ -204,30 +300,35 @@ async function main() {
     return
   }
 
-  let mapApi = null
-  let latest = null
+  const meta = getMeta()
+  let mapApi = ensureMap(null, !meta.hasFlightPath)
+  let latest = { ship: null, loading: true, error: null, lastMovedAt: null }
+
+  const tick = (state) => {
+    const nowMs = Date.now()
+    renderMissionClock(state, nowMs)
+    renderLiveReadouts(state)
+    renderStatus(state, nowMs)
+    renderTelemetry(state, nowMs)
+  }
+
+  tick(latest)
 
   const stop = startTracker((state) => {
     latest = state
-    const nowMs = Date.now()
-    renderStatus(state, nowMs)
-    renderTelemetry(state, nowMs)
+    tick(state)
 
-    const mapSection = document.querySelector('.map-section')
     if (!state.ship?.current) {
-      if (!mapApi) {
-        mapSection.innerHTML = `<div class="map-skeleton"><p>${
-          state.error || 'Acquiring telemetry…'
-        }</p></div>`
-      }
+      mapApi = ensureMap(mapApi, !meta.hasFlightPath)
+      mapApi.update({
+        ship: null,
+        liveTrail: state.liveTrail,
+        spaceNoticesExtension: state.spaceNoticesExtension,
+      })
       return
     }
 
-    if (!mapApi) {
-      mapSection.innerHTML =
-        '<div class="map-shell"><div id="track-map" class="track-map"></div></div>'
-      mapApi = createMap(document.getElementById('track-map'))
-    }
+    mapApi = ensureMap(mapApi, false)
     mapApi.update({
       ship: state.ship,
       liveTrail: state.liveTrail,
@@ -237,10 +338,8 @@ async function main() {
 
   setInterval(() => {
     if (!latest) return
-    const nowMs = Date.now()
-    renderStatus(latest, nowMs)
-    renderTelemetry(latest, nowMs)
-  }, 1000)
+    tick(latest)
+  }, 250)
 
   window.addEventListener('beforeunload', stop)
 }

@@ -9,20 +9,22 @@ import { gpsTimeToDate } from './utils.js'
 
 const POLL_MS = 10_000
 const SPACE_NOTICES_POLL_MS = 60_000
+const SHIP_KEY = 'ship41'
 
-export async function fetchShip40Tracker(signal) {
+export async function fetchShip41Tracker(signal) {
   const res = await fetch(`/api/tracker?t=${Date.now()}`, {
     signal,
     cache: 'no-store',
   })
   if (!res.ok) throw new Error(`SpaceX tracker returned ${res.status}`)
   const raw = await res.json()
-  if (!raw?.ship40?.current) return null
-  return { ship: raw.ship40, fetchedAt: new Date() }
+  const ship = raw?.[SHIP_KEY]
+  if (!ship?.current) return null
+  return { ship, fetchedAt: new Date() }
 }
 
-export async function fetchSpaceNoticesShip40(signal) {
-  const res = await fetch(`/api/space-notices-ship40?t=${Date.now()}`, {
+export async function fetchSpaceNoticesShip41(signal) {
+  const res = await fetch(`/api/space-notices-ship41?t=${Date.now()}`, {
     signal,
     cache: 'no-store',
   })
@@ -46,6 +48,12 @@ function pointsAfterId(points, afterId) {
 
 function missionClockNow(nowMs = Date.now()) {
   const { splashdownGpsTime, splashdownMissionTime } = getMeta()
+  if (
+    typeof splashdownGpsTime !== 'number' ||
+    typeof splashdownMissionTime !== 'number'
+  ) {
+    return null
+  }
   const splashMs = gpsTimeToDate(splashdownGpsTime).getTime()
   const elapsed = Math.max(0, (nowMs - splashMs) / 1000)
   return {
@@ -85,11 +93,16 @@ export function startTracker(onChange) {
 
   const emit = () => {
     if (state.ship?.current) {
-      const gps = estimateLastMoveGpsTime(
-        state.ship.current,
-        state.spaceNoticesExtension,
-      )
-      state.lastMovedAt = gpsTimeToDate(gps)
+      if (state.positionSource === 'spacex' && state.fetchedAt) {
+        // Prefer telemetry freshness while SpaceX is publishing live fixes.
+        state.lastMovedAt = state.fetchedAt
+      } else {
+        const gps = estimateLastMoveGpsTime(
+          state.ship.current,
+          state.spaceNoticesExtension,
+        )
+        state.lastMovedAt = gpsTimeToDate(gps)
+      }
     } else {
       state.lastMovedAt = null
     }
@@ -101,13 +114,14 @@ export function startTracker(onChange) {
   let positionSource = null
 
   async function loadFromSpaceNotices() {
-    const points = await fetchSpaceNoticesShip40(controller.signal)
+    const points = await fetchSpaceNoticesShip41(controller.signal)
     const { bakedLatestId } = getMeta()
     const extension = pointsAfterId(points, bakedLatestId)
     state.spaceNoticesExtension = extension
     const tip = extension[extension.length - 1] ?? points[points.length - 1]
     if (!tip) return false
     const clock = missionClockNow()
+    if (!clock) return false
     state.ship = shipTrackFromSpaceNoticesTip(tip, clock)
     state.fetchedAt = new Date()
     state.positionSource = 'space-notices'
@@ -119,7 +133,7 @@ export function startTracker(onChange) {
 
   async function load() {
     try {
-      const live = await fetchShip40Tracker(controller.signal)
+      const live = await fetchShip41Tracker(controller.signal)
       if (live) {
         state.ship = live.ship
         state.fetchedAt = live.fetchedAt
@@ -135,7 +149,10 @@ export function startTracker(onChange) {
         return
       }
       const ok = await loadFromSpaceNotices()
-      if (!ok && !hasLoaded) state.error = 'No live Ship 40 position available'
+      if (!ok && !hasLoaded) {
+        state.error = null
+        // Pre-launch: no ship41 telemetry yet is expected.
+      }
     } catch (err) {
       if (controller.signal.aborted) return
       try {
@@ -154,14 +171,15 @@ export function startTracker(onChange) {
 
   async function loadSpaceNotices() {
     try {
-      const points = await fetchSpaceNoticesShip40(controller.signal)
+      const points = await fetchSpaceNoticesShip41(controller.signal)
       const { bakedLatestId } = getMeta()
       const extension = pointsAfterId(points, bakedLatestId)
       state.spaceNoticesExtension = extension
       if (positionSource === 'space-notices') {
         const tip = extension[extension.length - 1] ?? points[points.length - 1]
-        if (tip) {
-          state.ship = shipTrackFromSpaceNoticesTip(tip, missionClockNow())
+        const clock = missionClockNow()
+        if (tip && clock) {
+          state.ship = shipTrackFromSpaceNoticesTip(tip, clock)
           state.fetchedAt = new Date()
         }
       }

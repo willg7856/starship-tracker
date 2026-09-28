@@ -186,8 +186,85 @@ select {
 .masthead-meta {
   display: grid;
   justify-items: end;
-  gap: 0.45rem;
+  gap: 0.35rem;
   text-align: right;
+}
+
+.mission-clock {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(1.35rem, 3.2vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.mission-clock[data-phase='prelaunch'] {
+  color: var(--warn);
+}
+
+.mission-clock[data-phase='flight'] {
+  color: var(--signal);
+}
+
+.live-hud {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper-raised) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.live-hud-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0.85rem var(--masthead-pad-x) 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 2rem;
+}
+
+.live-hud[data-state='waiting'] .live-readout-value {
+  color: var(--muted-2);
+}
+
+.live-readout {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.live-readout + .live-readout {
+  border-left: 1px solid var(--line);
+  padding-left: 2rem;
+}
+
+.live-readout-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.live-readout-value {
+  font-family: var(--font-mono);
+  font-size: clamp(2rem, 5.5vw, 3.15rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-readout-value span {
+  margin-left: 0.3rem;
+  font-size: 0.38em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  vertical-align: 0.28em;
 }
 
 .status-line {
@@ -209,6 +286,10 @@ select {
 
 .status-line[data-state='live'] {
   color: var(--signal);
+}
+
+.status-line[data-state='waiting'] {
+  color: var(--warn);
 }
 
 .masthead-actions {
@@ -314,6 +395,10 @@ select {
   backdrop-filter: blur(6px);
 }
 
+.map-view-toggle[hidden] {
+  display: none !important;
+}
+
 .map-view-toggle button {
   appearance: none;
   border: 0;
@@ -334,6 +419,41 @@ select {
 }
 
 .map-view-toggle button.active {
+  background: var(--ink);
+  color: var(--paper-raised);
+}
+
+.map-camera-controls {
+  position: absolute;
+  z-index: 500;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: inline-flex;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: var(--toggle-bg);
+  backdrop-filter: blur(6px);
+}
+
+.map-camera-controls button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.map-camera-controls button:hover {
+  color: var(--ink);
+  background: rgba(18, 20, 26, 0.04);
+}
+
+.map-camera-controls button.active {
   background: var(--ink);
   color: var(--paper-raised);
 }
@@ -469,7 +589,7 @@ select {
 
 @media (min-width: 800px) {
   .telemetry-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .telemetry-grid.with-drift {
@@ -502,7 +622,8 @@ select {
   }
 
   .telemetry-grid > div:nth-child(4n),
-  .telemetry-grid.with-drift > div:nth-child(3n) {
+  .telemetry-grid.with-drift > div:nth-child(3n),
+  .telemetry-grid > div:nth-child(3n) {
     border-right: 0;
     padding-right: 0;
   }
@@ -510,6 +631,8 @@ select {
   .telemetry-grid > div:nth-child(4n + 2),
   .telemetry-grid > div:nth-child(4n + 3),
   .telemetry-grid > div:nth-child(4n + 4),
+  .telemetry-grid > div:nth-child(3n + 2),
+  .telemetry-grid > div:nth-child(3n + 3),
   .telemetry-grid.with-drift > div:nth-child(3n + 2),
   .telemetry-grid.with-drift > div:nth-child(3n + 3) {
     padding-left: 1.1rem;
@@ -590,6 +713,16 @@ select {
     width: 100%;
   }
 
+  .live-hud-inner {
+    gap: 0.85rem 1.1rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .live-readout + .live-readout {
+    padding-left: 1.1rem;
+  }
+
   .masthead-actions {
     justify-content: flex-start;
   }
@@ -602,5 +735,10 @@ select {
   .map-view-toggle {
     top: 0.7rem;
     left: 0.7rem;
+  }
+
+  .map-camera-controls {
+    top: 0.7rem;
+    right: 0.7rem;
   }
 }
