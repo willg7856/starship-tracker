@@ -1,6 +1,6 @@
 import { drawTelemetryCharts, recordTelemetrySample } from './charts.js'
 import { createMap } from './map.js'
-import { getMeta, loadTrack } from './path.js'
+import { getMeta, loadTrack, setPlannedLiftoffMs } from './path.js'
 import { startTracker } from './tracker.js'
 import {
   SPACEX_VEHICLE_TRACKER,
@@ -612,6 +612,23 @@ async function main() {
   }
 
   tick(latest)
+  const refreshPlannedLiftoff = async () => {
+    try {
+      const res = await fetch('/api/launch-time', { cache: 'no-store' })
+      if (!res.ok) return
+      const body = await res.json()
+      const ms = Date.parse(body?.plannedLiftoff)
+      if (!Number.isFinite(ms)) return
+      if (ms < Date.parse('2026-09-27T00:00:00Z') || ms > Date.parse('2026-10-02T00:00:00Z')) {
+        return
+      }
+      setPlannedLiftoffMs(ms)
+    } catch {
+      /* keep the baked target */
+    }
+  }
+  void refreshPlannedLiftoff()
+  const liftoffPoll = setInterval(() => void refreshPlannedLiftoff(), 20_000)
 
   const stop = startTracker((state) => {
     latest = state
@@ -640,7 +657,10 @@ async function main() {
     tick(latest)
   }, 250)
 
-  window.addEventListener('beforeunload', stop)
+  window.addEventListener('beforeunload', () => {
+    clearInterval(liftoffPoll)
+    stop()
+  })
 }
 
 main()

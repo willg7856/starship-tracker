@@ -66,6 +66,14 @@ export function getMeta() {
   return meta
 }
 
+/** Replace the baked T-0 when SpaceX publishes a new target. */
+export function setPlannedLiftoffMs(ms) {
+  if (!meta || !Number.isFinite(ms)) return false
+  if (meta.plannedLiftoffMs === ms) return false
+  meta.plannedLiftoffMs = ms
+  return true
+}
+
 export function getFlightTrack() {
   return track.points || []
 }

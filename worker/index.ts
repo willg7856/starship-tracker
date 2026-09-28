@@ -39,6 +39,56 @@ async function proxyUpstream({
 }
 
 const VERCEL_ANALYTICS_ORIGIN = 'https://starship-tracker-kappa.vercel.app'
+const FLIGHT14_MISSIONS =
+  'https://content.spacex.com/cms-assets/future_missions.json'
+const FLIGHT14_TILES =
+  'https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming'
+
+async function flight14LaunchTime(): Promise<Response> {
+  try {
+    const [missionsRes, tilesRes] = await Promise.all([
+      fetch(`${FLIGHT14_MISSIONS}?t=${Date.now()}`, {
+        headers: { Accept: 'application/json' },
+      }),
+      fetch(FLIGHT14_TILES, { headers: { Accept: 'application/json' } }),
+    ])
+    if (!missionsRes.ok || !tilesRes.ok) {
+      return Response.json(
+        { error: 'SpaceX launch time is unavailable' },
+        { status: 502 },
+      )
+    }
+    const missions = (await missionsRes.json()) as Record<
+      string,
+      { TZeroLaunchDate?: { Seconds?: number }; TZeroPaused?: boolean | null }
+    >
+    const tiles = (await tilesRes.json()) as Array<{
+      title?: string
+      link?: string
+      correlationId?: string
+    }>
+    const tile = tiles.find(
+      (item) => item.link === 'starship-flight-14' || item.title === 'Starship Flight 14',
+    )
+    const timing = tile?.correlationId ? missions[tile.correlationId] : undefined
+    const seconds = timing?.TZeroLaunchDate?.Seconds
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
+      return Response.json({ error: 'SpaceX has no Flight 14 T-0' }, { status: 502 })
+    }
+    return Response.json(
+      {
+        plannedLiftoff: new Date(seconds * 1000).toISOString().replace('.000Z', 'Z'),
+        paused: timing?.TZeroPaused === true,
+      },
+      {
+        headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' },
+      },
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Upstream fetch failed'
+    return Response.json({ error: message }, { status: 502 })
+  }
+}
 
 async function proxyVercelInsights(request: Request): Promise<Response> {
   const incoming = new URL(request.url)
@@ -85,6 +135,10 @@ export default {
         bustCache: true,
         errorLabel: 'SpaceX tracker',
       })
+    }
+
+    if (pathname === '/api/launch-time') {
+      return flight14LaunchTime()
     }
 
     if (pathname === '/api/space-notices-ship41') {
