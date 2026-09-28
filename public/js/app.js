@@ -1,3 +1,4 @@
+import { drawTelemetryCharts, recordTelemetrySample } from './charts.js'
 import { createMap } from './map.js'
 import { getMeta, loadTrack } from './path.js'
 import { startTracker } from './tracker.js'
@@ -24,6 +25,7 @@ const LIVESTREAM_EMBED =
 const LIFTOFF_ALT_M = 1500
 const LIFTOFF_SPEED_MS = 80
 const PAD_RADIUS_DEG = 0.08
+let chartsPainted = false
 
 function getTheme() {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -129,6 +131,16 @@ function renderShell(root) {
             </div>
           </div>
           <dl class="telemetry-grid"></dl>
+          <div class="telemetry-charts">
+            <figure class="telem-chart">
+              <figcaption>Altitude</figcaption>
+              <canvas data-chart="altitude" aria-label="Altitude over time"></canvas>
+            </figure>
+            <figure class="telem-chart">
+              <figcaption>Speed <span>km/h</span></figcaption>
+              <canvas data-chart="speed" aria-label="Speed over time"></canvas>
+            </figure>
+          </div>
         </div>
       </section>
 
@@ -146,6 +158,7 @@ function renderShell(root) {
 
   document.querySelector('.theme-toggle').addEventListener('click', () => {
     setTheme(getTheme() === 'dark' ? 'light' : 'dark')
+    drawTelemetryCharts()
   })
   setTheme(getTheme())
 
@@ -173,7 +186,10 @@ function renderShell(root) {
     document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`)
   }
   syncTopbar()
-  window.addEventListener('resize', syncTopbar)
+  window.addEventListener('resize', () => {
+    syncTopbar()
+    drawTelemetryCharts()
+  })
 }
 
 function liveMissionTime(state, nowMs) {
@@ -287,6 +303,10 @@ function renderTelemetry(state) {
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
     <div><dt>Downrange</dt><dd>${downrange} <span>from pad</span></dd></div>
   `
+  if (recordTelemetrySample(current) || !chartsPainted) {
+    chartsPainted = true
+    requestAnimationFrame(() => drawTelemetryCharts())
+  }
 }
 
 function renderStatus(state, nowMs) {
