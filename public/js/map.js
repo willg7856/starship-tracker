@@ -7,12 +7,20 @@ import { thinLatLonPath } from './trail.js'
 import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const MAX_BRIDGE_KM = 1
+const FOLLOW_ZOOM = 8
 
 export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
   let mode = prelaunch || !meta.hasFlightPath ? 'flight' : 'drift'
+  /** @type {'follow' | 'wide' | 'auto'} */
+  let camera = prelaunch ? 'wide' : 'follow'
+  let fittedCamera = null
   let fittedMode = null
+  let latestLive = null
+  let latestFullPath = []
+  let latestDriftFrame = []
+  let userInteracting = false
   let layers = {
     ascent: null,
     reentry: null,
@@ -39,7 +47,7 @@ export function createMap(container, { prelaunch = false } = {}) {
     zoomSnap: 0.1,
     zoomDelta: 0.5,
     scrollWheelZoom: true,
-  }).setView(initialCenter, prelaunch ? 7 : 9)
+  }).setView(initialCenter, prelaunch ? 7 : FOLLOW_ZOOM)
 
   L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
@@ -92,20 +100,16 @@ export function createMap(container, { prelaunch = false } = {}) {
         )}`,
       )
       .addTo(map)
-    const bounds = L.latLngBounds([
-      [meta.launchPad.lat, meta.launchPad.lon],
-      [meta.landingFix.lat, meta.landingFix.lon],
-    ])
-    map.fitBounds(bounds.pad(0.2), { animate: false, maxZoom: 4 })
   }
 
   const shell = container.closest('.map-shell') || container.parentElement
+
   let toggleEl = shell?.querySelector('.map-view-toggle')
   if (!prelaunch && !toggleEl && shell) {
     toggleEl = document.createElement('div')
     toggleEl.className = 'map-view-toggle'
     toggleEl.setAttribute('role', 'group')
-    toggleEl.setAttribute('aria-label', 'Map view')
+    toggleEl.setAttribute('aria-label', 'Map path view')
     toggleEl.hidden = true
     toggleEl.innerHTML =
       '<button type="button" data-mode="drift" class="active">Drift</button>' +
@@ -118,34 +122,136 @@ export function createMap(container, { prelaunch = false } = {}) {
       toggleEl.querySelectorAll('button').forEach((b) => {
         b.classList.toggle('active', b === btn)
       })
-      // force re-fit on next update
       fittedMode = null
+      if (camera === 'auto') applyCamera(true)
     })
   }
   if (toggleEl && prelaunch) toggleEl.hidden = true
 
-  function fit(view, driftPoints, fullPath, live) {
-    if (fittedMode === view) return
+  let cameraEl = shell?.querySelector('.map-camera-controls')
+  if (!cameraEl && shell) {
+    cameraEl = document.createElement('div')
+    cameraEl.className = 'map-camera-controls'
+    cameraEl.setAttribute('role', 'group')
+    cameraEl.setAttribute('aria-label', 'Map camera')
+    cameraEl.innerHTML =
+      '<button type="button" data-camera="follow">Follow</button>' +
+      '<button type="button" data-camera="wide">Wide</button>'
+    shell.append(cameraEl)
+    cameraEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-camera]')
+      if (!btn) return
+      setCamera(btn.dataset.camera, true)
+    })
+  }
+
+  function syncCameraButtons() {
+    if (!cameraEl) return
+    cameraEl.querySelectorAll('button[data-camera]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.camera === camera)
+    })
+  }
+
+  function setCamera(next, force = false) {
+    camera = next
+    fittedCamera = null
+    fittedMode = null
+    userInteracting = false
+    syncCameraButtons()
+    applyCamera(force)
+  }
+
+  function overviewBounds() {
+    const points = []
+    points.push([meta.launchPad.lat, meta.launchPad.lon])
+    if (meta.landingFix) {
+      points.push([meta.landingFix.lat, meta.landingFix.lon])
+    }
+    for (const p of latestFullPath) points.push(p)
+    for (const p of latestDriftFrame) points.push(p)
+    if (latestLive) points.push(latestLive)
+    if (points.length < 2) {
+      return L.latLngBounds(
+        points[0] || initialCenter,
+        points[0] || initialCenter,
+      )
+    }
+    return L.latLngBounds(points)
+  }
+
+  function applyCamera(force = false) {
+    if (userInteracting && !force) return
+
+    if (camera === 'follow') {
+      if (!latestLive) return
+      if (!force && fittedCamera === 'follow') {
+        map.panTo(latestLive, { animate: true, duration: 0.45 })
+        return
+      }
+      fittedCamera = 'follow'
+      map.setView(latestLive, FOLLOW_ZOOM, { animate: !force, duration: 0.5 })
+      return
+    }
+
+    if (camera === 'wide') {
+      if (!force && fittedCamera === 'wide') return
+      fittedCamera = 'wide'
+      const bounds = overviewBounds()
+      map.fitBounds(bounds.pad(0.18), {
+        animate: !force,
+        duration: 0.55,
+        maxZoom: 4,
+      })
+      return
+    }
+
+    // auto: legacy drift/flight framing
+    const view = mode
+    if (!force && fittedMode === view) return
     fittedMode = view
     if (view === 'drift') {
       const anchor = meta.landingFix
         ? [[meta.landingFix.lat, meta.landingFix.lon]]
         : [[meta.launchPad.lat, meta.launchPad.lon]]
-      const bounds = L.latLngBounds(driftPoints.length ? driftPoints : anchor)
-      if (live) bounds.extend(live)
+      const bounds = L.latLngBounds(
+        latestDriftFrame.length ? latestDriftFrame : anchor,
+      )
+      if (latestLive) bounds.extend(latestLive)
       map.fitBounds(bounds.pad(0.35), { animate: false })
       return
     }
-    if (fullPath.length >= 2) {
-      const bounds = L.latLngBounds(fullPath)
-      if (live) bounds.extend(live)
+    if (latestFullPath.length >= 2) {
+      const bounds = L.latLngBounds(latestFullPath)
+      if (latestLive) bounds.extend(latestLive)
       map.fitBounds(bounds.pad(0.08), { animate: false })
       return
     }
-    if (live) {
-      map.setView(live, Math.max(map.getZoom(), 6), { animate: false })
+    if (latestLive) {
+      map.setView(latestLive, Math.max(map.getZoom(), 6), { animate: false })
     }
   }
+
+  syncCameraButtons()
+  if (prelaunch) {
+    latestFullPath = paths.full.length
+      ? paths.full
+      : [
+          [meta.launchPad.lat, meta.launchPad.lon],
+          meta.landingFix
+            ? [meta.landingFix.lat, meta.landingFix.lon]
+            : [meta.launchPad.lat, meta.launchPad.lon],
+        ]
+    setCamera('wide', true)
+  }
+
+  map.on('dragstart zoomstart', () => {
+    if (camera === 'follow') {
+      userInteracting = true
+      camera = 'auto'
+      fittedCamera = null
+      syncCameraButtons()
+    }
+  })
 
   function clearDriftLayers() {
     for (const layer of layers.drift) map.removeLayer(layer)
@@ -170,10 +276,17 @@ export function createMap(container, { prelaunch = false } = {}) {
 
       const current = ship.current
       const live = [current.latitude, current.longitude]
+      latestLive = live
       const landed = isNearSurface(current.altitude)
       const view = landed && meta.hasFlightPath ? mode : 'flight'
 
       if (toggleEl) toggleEl.hidden = !(landed && meta.hasFlightPath)
+
+      // Prefer Follow during ascent/flight; keep Wide if user chose it.
+      if (camera === 'auto' && !landed) {
+        camera = 'follow'
+        syncCameraButtons()
+      }
 
       const snExtensionPath = spaceNoticesExtension.map((p) => [
         p.latitude,
@@ -219,7 +332,6 @@ export function createMap(container, { prelaunch = false } = {}) {
         }
       }
 
-      // Prefer SpaceX live trajectory when the baked path is still a prelaunch stub.
       const sxTrajectory = Array.isArray(ship.trajectory) ? ship.trajectory : []
       if (!meta.hasFlightPath && sxTrajectory.length >= 2) {
         const sxPath = sxTrajectory
@@ -241,6 +353,9 @@ export function createMap(container, { prelaunch = false } = {}) {
       for (const p of livePath) driftFrame.push(p)
       driftFrame.push(live)
 
+      latestFullPath = fullPath
+      latestDriftFrame = driftFrame
+
       clearDriftLayers()
       for (const segment of oceanDriftCleanSegments) {
         if (segment.length < 2) continue
@@ -261,7 +376,6 @@ export function createMap(container, { prelaunch = false } = {}) {
         }).addTo(map)
       }
 
-      // live tip trail
       if (landed && livePath.length) {
         const tipSeg = oceanDriftCleanSegments[oceanDriftCleanSegments.length - 1]
         const anchor = tipSeg?.[tipSeg.length - 1]
@@ -354,7 +468,7 @@ export function createMap(container, { prelaunch = false } = {}) {
         layers.shipHalo.setRadius(halo)
       }
 
-      fit(view, driftFrame, fullPath, live)
+      applyCamera(false)
       map.invalidateSize()
     },
   }
