@@ -654,10 +654,25 @@ function observePad(state, nowMs) {
 }
 
 /** Still on the countdown, including a frozen T- 0:00:00 after the planned time. */
+let countdownPaused = flight.paused === true
+
+/**
+ * SpaceX does not always publish live Starship telemetry (Flight 15 has its
+ * vehicle tracker switched off). With no telemetry at all, an unpaused T-0
+ * that passed more than 2 minutes ago means the launch happened: SpaceX moves
+ * T-0 or pauses the countdown for holds. Count T+ from SpaceX's T-0.
+ */
+function launchedPerSpaceXClock(state) {
+  if (state?.ship?.current || countdownPaused) return false
+  const planned = getMeta().plannedLiftoffMs
+  return typeof planned === 'number' && Date.now() - planned > 120_000
+}
+
 function holdingCountdown(state) {
   // Stopped at landing: after a tower catch the ship is back on the pad, but
   // the flight has happened.
   if (clockStopped) return false
+  if (launchedPerSpaceXClock(state)) return false
   if (officialLiftoffMs(state) != null) return false
   if (liftoffConfirmed) return false
   if (startedToMove(state) && !sawOnPad && samplesSeen > 0) return false
@@ -948,7 +963,9 @@ function renderStatus(state, nowMs) {
     )}`
     dataState = 'live'
   } else if (!state.loading && !state.ship?.current) {
-    label = 'Waiting for telemetry'
+    label = launchedPerSpaceXClock(state)
+      ? 'No live position from SpaceX'
+      : 'Waiting for telemetry'
     dataState = 'waiting'
   }
   el.textContent = label
@@ -1003,6 +1020,7 @@ async function main() {
       window.location.reload()
       return
     }
+    countdownPaused = info.paused === true
     if (Number.isFinite(info.landingMissionTime)) {
       setLandingMissionTime(info.landingMissionTime)
     }
