@@ -1102,3 +1102,328 @@ select {
     gap: 0.15rem;
   }
 }
+
+/* ------------------------------------------------------------------
+ * Beyond Stage Zero brand alignment (matches beyondstagezero.com):
+ * ink/paper palette, ignition orange, JetBrains Mono uppercase labels,
+ * dark nav bar with the BSZ logo, black footer.
+ * ------------------------------------------------------------------ */
+:root {
+  --ink: #0b0d0f;
+  --ink-soft: #2a323b;
+  --paper: #fafaf7;
+  --paper-raised: #ffffff;
+  --line: #d6d9d3;
+  --muted: #4a535d;
+  --muted-2: #7b8590;
+  --ignition: #ff5a1f;
+  --ignition-strong: #e64613;
+  --body-glow: transparent;
+  --body-top: #fafaf7;
+  --body-bottom: #fafaf7;
+  --masthead-bg: #fafaf7;
+  --font-display: "JetBrains Mono", ui-monospace, monospace;
+  --nav-bg: #0b0d0f;
+  --nav-line: #1e242b;
+  --nav-fg: #fafaf7;
+  --nav-muted: #9aa3ad;
+}
+
+html[data-theme='dark'] {
+  --ink: #fafaf7;
+  --ink-soft: #b8bfc7;
+  --paper: #0b0d0f;
+  --paper-raised: #14181c;
+  --line: #1e242b;
+  --muted: #9aa3ad;
+  --muted-2: #7b8590;
+  --ignition: #ff7a47;
+  --ignition-strong: #ff5a1f;
+  --body-glow: transparent;
+  --body-top: #0b0d0f;
+  --body-bottom: #0b0d0f;
+  --masthead-bg: #0b0d0f;
+}
+
+/* Nav bar: always dark, like the main site. */
+.topbar {
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--nav-line);
+  color: var(--nav-fg);
+}
+
+.topbar-inner {
+  min-height: 64px;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  color: var(--nav-fg);
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 0;
+}
+
+.brand-logo-mark {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  color: #ffffff;
+}
+
+.brand-logo-text {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffffff;
+}
+
+.brand-logo-bracket {
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+.brand-logo-bracket-mark {
+  color: #ff5a1f;
+}
+
+.powered-by.nav-brand:hover .brand-logo-text {
+  color: #ffffff;
+}
+
+.topbar .topbar-metric-label {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  color: var(--nav-muted);
+}
+
+.topbar .topbar-metric-value {
+  color: var(--nav-fg);
+}
+
+.topbar .topbar-metric-value span {
+  color: var(--nav-muted);
+}
+
+.topbar .mission-clock {
+  color: var(--nav-fg);
+}
+
+.topbar .mission-clock[data-phase='prelaunch'] {
+  color: #ff7a47;
+}
+
+.topbar .mission-clock[data-phase='flight'] {
+  color: #3dba86;
+}
+
+.topbar .status-line {
+  color: var(--nav-muted);
+}
+
+.topbar .status-line[data-state='live'] {
+  color: #3dba86;
+}
+
+.topbar .status-line[data-state='loading'],
+.topbar .status-line[data-state='waiting'] {
+  color: #ff7a47;
+}
+
+.topbar .status-line[data-state='error'] {
+  color: #f07167;
+}
+
+/* Masthead: big sans headline, bracketed mono kicker for the flight. */
+.masthead {
+  border-bottom-color: var(--line);
+}
+
+.masthead-title {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.masthead-title-meta {
+  order: -1;
+  flex-basis: 100%;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ignition);
+}
+
+.masthead-title-meta:not(:empty)::before {
+  content: '[ ';
+}
+
+.masthead-title-meta:not(:empty)::after {
+  content: ' ]';
+}
+
+.masthead-link {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Buttons: orange primary (Watch) like "Support us", outline secondary. */
+.watch-toggle,
+.theme-toggle {
+  min-height: 2.1rem;
+  padding: 0.4rem 0.9rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.watch-toggle {
+  border-color: var(--ignition-strong);
+  background: #ff5a1f;
+  color: #ffffff;
+}
+
+.watch-toggle:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.watch-toggle.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.theme-toggle {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.theme-toggle:hover {
+  background: transparent;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* Section headings: sans headline like the main site. */
+.telemetry-head h2,
+.timeline-head h2,
+.livestream-head h2 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.timeline-head p,
+.telemetry-place,
+.next-event {
+  letter-spacing: 0.02em;
+}
+
+.telemetry-grid dt {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.1em;
+}
+
+/* Footer: black band like the main site. */
+.footer {
+  border-top: 0;
+  padding: 2.5rem var(--masthead-pad-x) 1.25rem;
+  background: #000000;
+  color: #9aa3ad;
+}
+
+.footer-inner {
+  align-items: flex-start;
+  gap: 1.75rem 3rem;
+}
+
+.footer-about {
+  display: grid;
+  gap: 1rem;
+  max-width: 24rem;
+}
+
+.footer-about p {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: #9aa3ad;
+}
+
+.footer .brand-logo-mark {
+  width: 22px;
+  height: 22px;
+}
+
+.footer .brand-logo-text {
+  font-size: 0.8rem;
+}
+
+.footer-links {
+  display: grid;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+}
+
+.footer-links a {
+  color: #fafaf7;
+  transition: color 0.15s ease;
+}
+
+.footer-links a:hover {
+  color: #ff7a47;
+}
+
+.footer-bottom {
+  max-width: var(--max);
+  margin: 2rem auto 0;
+  padding-top: 1rem;
+  border-top: 1px solid #1e242b;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7b8590;
+}
+
+@media (max-width: 720px) {
+  .topbar-inner {
+    min-height: 0;
+  }
+
+  .brand-logo-mark {
+    width: 24px;
+    height: 24px;
+  }
+
+  .brand-logo-text {
+    font-size: 0.8rem;
+  }
+}
