@@ -39,18 +39,18 @@ async function proxyUpstream({
 }
 
 const VERCEL_ANALYTICS_ORIGIN = 'https://starship-tracker-kappa.vercel.app'
-const FLIGHT14_MISSIONS =
+const FLIGHT_MISSIONS =
   'https://content.spacex.com/cms-assets/future_missions.json'
-const FLIGHT14_TILES =
+const FLIGHT_TILES =
   'https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming'
 
-async function flight14LaunchTime(): Promise<Response> {
+async function flightLaunchTime(): Promise<Response> {
   try {
     const [missionsRes, tilesRes] = await Promise.all([
-      fetch(`${FLIGHT14_MISSIONS}?t=${Date.now()}`, {
+      fetch(`${FLIGHT_MISSIONS}?t=${Date.now()}`, {
         headers: { Accept: 'application/json' },
       }),
-      fetch(FLIGHT14_TILES, { headers: { Accept: 'application/json' } }),
+      fetch(FLIGHT_TILES, { headers: { Accept: 'application/json' } }),
     ])
     if (!missionsRes.ok || !tilesRes.ok) {
       return Response.json(
@@ -68,12 +68,12 @@ async function flight14LaunchTime(): Promise<Response> {
       correlationId?: string
     }>
     const tile = tiles.find(
-      (item) => item.link === 'starship-flight-14' || item.title === 'Starship Flight 14',
+      (item) => item.link === 'starship-flight-15' || item.title === 'Starship Flight 15',
     )
     const timing = tile?.correlationId ? missions[tile.correlationId] : undefined
     const seconds = timing?.TZeroLaunchDate?.Seconds
     if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
-      return Response.json({ error: 'SpaceX has no Flight 14 T-0' }, { status: 502 })
+      return Response.json({ error: 'SpaceX has no Flight 15 T-0' }, { status: 502 })
     }
     return Response.json(
       {
@@ -130,7 +130,7 @@ export default {
     if (pathname === '/api/tracker') {
       return proxyUpstream({
         upstream:
-          'https://sxcontent9668.azureedge.us/cms-assets/starship_tracker_public.json',
+          'https://content.spacex.com/cms-assets/starship_tracker_public.json',
         cacheControl: 'public, max-age=1, s-maxage=1',
         bustCache: true,
         errorLabel: 'SpaceX tracker',
@@ -138,23 +138,23 @@ export default {
     }
 
     if (pathname === '/api/launch-time') {
-      return flight14LaunchTime()
+      return flightLaunchTime()
     }
 
     if (pathname === '/api/ship-trail') {
       return proxyUpstream({
         upstream:
-          'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-14-ship-41-trajectory',
+          'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-15-ship-42-trajectory',
         cacheControl: 'public, max-age=15, s-maxage=15',
         errorLabel: 'Ship trail',
       })
     }
 
-    if (pathname === '/api/space-notices-ship41') {
+    if (pathname === '/api/space-notices-ship') {
       return proxyUpstream({
-        upstream: 'https://data.space-notices.com/space-notices-data/ship-41',
+        upstream: 'https://data.space-notices.com/space-notices-data/ship-42',
         cacheControl: 'public, max-age=30, s-maxage=30',
-        errorLabel: 'Space Notices ship-41 feed',
+        errorLabel: 'Space Notices ship-42 feed',
       })
     }
 

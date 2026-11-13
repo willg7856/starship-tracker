@@ -9,13 +9,13 @@ import {
   restElapsedSeconds,
   saveLiveTrail,
 } from './trail.js'
-import { gpsTimeToDate, speedBetweenFixes } from './utils.js'
+import { MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } from './utils.js'
 
 const POLL_MS = 1_000
 const SPACE_NOTICES_POLL_MS = 60_000
 const SHIP_TRAIL_POLL_MS = 30_000
-const SHIP_KEY = 'ship41'
-const LAST_FIX_KEY = 'bsz-ship41-last-fix-v1'
+const SHIP_KEY = 'ship42'
+const LAST_FIX_KEY = 'bsz-ship42-last-fix-v1'
 
 function readLastFix() {
   try {
@@ -74,20 +74,33 @@ function withDerivedSpeed(current) {
   return { ...current, speed }
 }
 
-export async function fetchShip41Tracker(signal) {
+/**
+ * SpaceX keys vehicles as `ship42`, `booster22`, and so on. Prefer this
+ * flight's ship; otherwise take the only ship with a live fix.
+ */
+function pickShip(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  if (raw[SHIP_KEY]?.current) return raw[SHIP_KEY]
+  const ships = Object.entries(raw).filter(
+    ([key, value]) => /^ship\d+$/i.test(key) && value?.current,
+  )
+  return ships.length === 1 ? ships[0][1] : null
+}
+
+export async function fetchShipTracker(signal) {
   const res = await fetch('/api/tracker', {
     signal,
     cache: 'no-store',
   })
   if (!res.ok) throw new Error(`SpaceX tracker returned ${res.status}`)
   const raw = await res.json()
-  const ship = raw?.[SHIP_KEY]
+  const ship = pickShip(raw)
   if (!ship?.current) return null
   return { ship, fetchedAt: new Date() }
 }
 
-export async function fetchSpaceNoticesShip41(signal) {
-  const res = await fetch(`/api/space-notices-ship41?t=${Date.now()}`, {
+export async function fetchSpaceNoticesShip(signal) {
+  const res = await fetch(`/api/space-notices-ship?t=${Date.now()}`, {
     signal,
     cache: 'no-store',
   })
@@ -191,7 +204,7 @@ export function startTracker(onChange) {
     const history = pointsFromNoticesCoordinates(noticesCoordinates, current, pad)
     if (history.length < 2) return
     const mission = current.mission_time
-    if (Number.isFinite(mission) && mission > 1 && mission < 20 * 3600) {
+    if (Number.isFinite(mission) && mission > 1 && mission < MAX_MISSION_S) {
       const liftoffGps = current.gps_time - mission
       const rest = restElapsedSeconds(history, liftoffGps)
       if (rest != null) state.landedElapsedSeconds = rest
@@ -245,7 +258,7 @@ export function startTracker(onChange) {
   }
 
   async function loadFromSpaceNotices() {
-    const points = await fetchSpaceNoticesShip41(controller.signal)
+    const points = await fetchSpaceNoticesShip(controller.signal)
     const { bakedLatestId } = getMeta()
     const extension = pointsAfterId(points, bakedLatestId)
     state.spaceNoticesExtension = extension
@@ -264,7 +277,7 @@ export function startTracker(onChange) {
 
   async function load() {
     try {
-      const live = await fetchShip41Tracker(controller.signal)
+      const live = await fetchShipTracker(controller.signal)
       if (live) {
         state.ship = {
           ...live.ship,
@@ -286,7 +299,7 @@ export function startTracker(onChange) {
       const ok = await loadFromSpaceNotices()
       if (!ok && !hasLoaded) {
         state.error = null
-        // Pre-launch: no ship41 telemetry yet is expected.
+        // Pre-launch: no ship telemetry yet is expected.
       }
     } catch (err) {
       if (controller.signal.aborted) return
@@ -306,7 +319,7 @@ export function startTracker(onChange) {
 
   async function loadSpaceNotices() {
     try {
-      const points = await fetchSpaceNoticesShip41(controller.signal)
+      const points = await fetchSpaceNoticesShip(controller.signal)
       const { bakedLatestId } = getMeta()
       const extension = pointsAfterId(points, bakedLatestId)
       state.spaceNoticesExtension = extension

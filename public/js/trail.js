@@ -3,10 +3,11 @@ import {
   formatAltitudeKm,
   formatSpeedKmh,
   haversineKm,
+  MAX_MISSION_S,
   speedBetweenFixes,
 } from './utils.js'
 
-const STORAGE_KEY = 'bsz-ship41-live-trail-v1'
+const STORAGE_KEY = 'bsz-ship42-live-trail-v1'
 const MAX_POINTS = 20_000
 const MIN_MOVE_M = 40
 
@@ -164,7 +165,7 @@ function segmentDurations(flight) {
 }
 
 /**
- * Space Notices keeps the flown Ship 41 track (lon, lat, alt), without times.
+ * Space Notices keeps the flown ship track (lon, lat, alt), without times.
  * Pin the ends to liftoff and the live SpaceX fix, and space the samples the
  * way they were recorded. Drop anything past the current position.
  */
@@ -222,7 +223,7 @@ export function pointsFromNoticesCoordinates(coordinates, anchor, pad) {
   const tipGps = anchor.gps_time - tipLag
   const mission = anchor.mission_time
   const liftoffGps =
-    Number.isFinite(mission) && mission > 1 && mission < 20 * 3600
+    Number.isFinite(mission) && mission > 1 && mission < MAX_MISSION_S
       ? anchor.gps_time - mission
       : null
   if (liftoffGps != null && tipGps - liftoffGps > 30 && span > 0) {
@@ -282,7 +283,7 @@ export function altitudeZeroElapsedSeconds(points, liftoffGps) {
     if (Number.isFinite(alt) && alt >= 500) wasUp = true
     if (!wasUp || formatAltitudeKm(alt) !== '0') continue
     const met = points[i].gps_time - liftoffGps
-    if (met > 30 && met < 20 * 3600) return met
+    if (met > 30 && met < MAX_MISSION_S) return met
   }
   return null
 }
@@ -303,7 +304,7 @@ export function restElapsedSeconds(points, liftoffGps) {
     const spd = speedBetweenFixes(points[i - 1], points[i])
     if (formatAltitudeKm(alt) !== '0' || formatSpeedKmh(spd) !== '0') continue
     const met = points[i].gps_time - liftoffGps
-    if (met > 30 && met < 20 * 3600) return met
+    if (met > 30 && met < MAX_MISSION_S) return met
   }
   return null
 }
@@ -389,7 +390,7 @@ export function appendLiveFix(trail, fix) {
   return next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next
 }
 
-/** Estimate when Ship 41 last moved, from shared track (not localStorage). */
+/** Estimate when the ship last moved, from shared track (not localStorage). */
 export function estimateLastMoveGpsTime(current, snExtension = []) {
   const { splashdownGpsTime, splashdownMissionTime } = getMeta()
   if (

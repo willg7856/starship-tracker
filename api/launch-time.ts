@@ -23,9 +23,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const planned = await readFlight14Liftoff()
+    const planned = await readFlightLiftoff()
     if (!planned) {
-      res.status(502).json({ error: 'SpaceX has no Flight 14 T-0' })
+      res.status(502).json({ error: 'SpaceX has no Flight 15 T-0' })
       return
     }
     res.setHeader('Content-Type', 'application/json')
@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-async function readFlight14Liftoff() {
+async function readFlightLiftoff() {
   const [missionsRes, tilesRes] = await Promise.all([
     fetch(`${MISSIONS}?t=${Date.now()}`, { headers: { Accept: 'application/json' } }),
     fetch(TILES, { headers: { Accept: 'application/json' } }),
@@ -48,7 +48,7 @@ async function readFlight14Liftoff() {
   const missions = (await missionsRes.json()) as Record<string, MissionTiming>
   const tiles = (await tilesRes.json()) as LaunchTile[]
   const tile = tiles.find(
-    (item) => item.link === 'starship-flight-14' || item.title === 'Starship Flight 14',
+    (item) => item.link === 'starship-flight-15' || item.title === 'Starship Flight 15',
   )
   const timing = tile?.correlationId ? missions[tile.correlationId] : undefined
   const seconds = timing?.TZeroLaunchDate?.Seconds

@@ -111,7 +111,7 @@ export function createMap(container, { prelaunch = false } = {}) {
       prelaunch && meta.landingFix
         ? {
             latlng: [meta.landingFix.lat, meta.landingFix.lon],
-            popup: `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
+            popup: `<strong>${landingTitle(meta, true)}</strong><br>${meta.landingFix.label}<br>${formatLatLon(
               meta.landingFix.lat,
               meta.landingFix.lon,
             )}`,
@@ -460,11 +460,11 @@ export function createMap(container, { prelaunch = false } = {}) {
           current.longitude,
         ) < PAD_STILL_KM
 
-      // Keep the planned splashdown marker while Ship 41 is still on the pad.
+      // Keep the planned splashdown marker while the ship is still on the pad.
       if (stillOnPad && meta.landingFix) {
         source.plannedLanding = {
           latlng: [meta.landingFix.lat, meta.landingFix.lon],
-          popup: `<strong>Planned splashdown</strong><br>${meta.landingFix.label}<br>${formatLatLon(
+          popup: `<strong>${landingTitle(meta, true)}</strong><br>${meta.landingFix.label}<br>${formatLatLon(
             meta.landingFix.lat,
             meta.landingFix.lon,
           )}`,
@@ -499,7 +499,7 @@ export function createMap(container, { prelaunch = false } = {}) {
       if (landed && meta.landingFix && !stillOnPad) {
         source.landing = {
           latlng: [meta.landingFix.lat, meta.landingFix.lon],
-          popup: `<strong>Splashdown</strong><br>${formatLatLon(
+          popup: `<strong>${landingTitle(meta, false)}</strong><br>${formatLatLon(
             meta.landingFix.lat,
             meta.landingFix.lon,
           )}`,
@@ -508,7 +508,7 @@ export function createMap(container, { prelaunch = false } = {}) {
         source.landing = null
       }
 
-      const shipLabel = meta.vehicle || 'Ship 41'
+      const shipLabel = meta.vehicle || 'Ship 42'
       source.ship = {
         latlng: live,
         radius: 9,
@@ -529,4 +529,9 @@ export function createMap(container, { prelaunch = false } = {}) {
       map.invalidateSize()
     },
   }
+}
+
+function landingTitle(meta, planned) {
+  const word = meta.landingFix?.kind === 'catch' ? 'catch' : 'splashdown'
+  return planned ? `Planned ${word}` : word[0].toUpperCase() + word.slice(1)
 }

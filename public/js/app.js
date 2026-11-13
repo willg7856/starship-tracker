@@ -5,6 +5,7 @@ import { getMeta, loadTrack, setActualLiftoffMs, setPlannedLiftoffMs } from './p
 import { startTracker } from './tracker.js'
 import {
   GPS_TO_UNIX_OFFSET,
+  MAX_MISSION_S,
   SPACEX_VEHICLE_TRACKER,
   describeLocation,
   formatAltitudeKm,
@@ -18,22 +19,25 @@ import {
 
 const THEME_KEY = 'bsz-theme'
 const SPACEX_WEBCAST =
-  'https://www.spacex.com/launches/starship-flight-14'
-/** Space.com simulcast of the SpaceX Flight 14 webcast. Official player cannot be embedded. */
-const LIVESTREAM_EMBED =
-  'https://www.youtube-nocookie.com/embed/CxHNK4UeVP4?rel=0&modestbranding=1'
+  'https://www.spacex.com/launches/starship-flight-15'
+/**
+ * YouTube simulcast of the SpaceX Flight 15 webcast (the official player
+ * cannot be embedded). Empty until a simulcast link is published; viewers can
+ * paste one in the meantime.
+ */
+const LIVESTREAM_EMBED = ''
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
 /**
  * Movement off the pad, not the planned clock. SpaceX mission_time already
- * ticks while Ship 41 is sitting at Starbase, so T+ starts only after we
+ * ticks while the ship is sitting at Starbase, so T+ starts only after we
  * see the ship leave.
  */
 const MOVE_ALT_M = 200
 const MOVE_SPEED_MS = 10
 const MOVE_RANGE_KM = 0.15
-const LIFTOFF_AT_KEY = 'bsz-flight14-liftoff-ms'
-const LANDED_ELAPSED_KEY = 'bsz-flight14-landed-elapsed-s'
-const ALTITUDE_ZERO_KEY = 'bsz-flight14-altitude-zero-s'
+const LIFTOFF_AT_KEY = 'bsz-flight15-liftoff-ms'
+const LANDED_ELAPSED_KEY = 'bsz-flight15-landed-elapsed-s'
+const ALTITUDE_ZERO_KEY = 'bsz-flight15-altitude-zero-s'
 let chartsPainted = false
 let liftoffAtMs = readLiftoffAt()
 let liftoffConfirmed = liftoffAtMs != null
@@ -57,7 +61,7 @@ function readAltitudeZero() {
 }
 
 function rememberAltitudeZero(seconds) {
-  if (!(seconds > 30) || seconds > 20 * 3600) return
+  if (!(seconds > 30) || seconds > MAX_MISSION_S) return
   if (
     altitudeZeroElapsedSeconds != null &&
     seconds >= altitudeZeroElapsedSeconds - 0.5
@@ -82,7 +86,7 @@ function readLandedElapsed() {
 }
 
 function rememberLandedElapsed(seconds, fromTrail) {
-  if (!(seconds > 30) || seconds > 20 * 3600) return
+  if (!(seconds > 30) || seconds > MAX_MISSION_S) return
   if (fromTrail) {
     if (
       landedElapsedSeconds != null &&
@@ -165,7 +169,7 @@ function renderShell(root) {
           <div class="masthead-brand-block">
             <h1 class="masthead-title">
               Live Starship Tracking
-              <span class="masthead-title-meta">Flight 14</span>
+              <span class="masthead-title-meta">Flight 15</span>
             </h1>
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
@@ -214,7 +218,7 @@ function renderShell(root) {
                 <button type="submit">Play</button>
                 ${
                   slot === 0
-                    ? '<button type="button" class="livestream-reset">Flight 14</button>'
+                    ? '<button type="button" class="livestream-reset">Flight 15</button>'
                     : '<button type="button" class="livestream-clear">Clear</button>'
                 }
               </form>
@@ -234,7 +238,7 @@ function renderShell(root) {
         </div>
       </section>
 
-      <section class="map-section" aria-label="Starship Flight 14 map">
+      <section class="map-section" aria-label="Starship Flight 15 map">
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
       </section>
 
@@ -328,7 +332,12 @@ function renderShell(root) {
         showSlotNote(slot, 'That link can’t be embedded. Use a YouTube or Twitch URL.')
         return
       }
-      if (index === 0) playSlot(slot, LIVESTREAM_EMBED)
+      if (index === 0) {
+        playSlot(slot, LIVESTREAM_EMBED)
+        if (!LIVESTREAM_EMBED) {
+          showSlotNote(slot, 'Paste the Flight 15 webcast link (YouTube or Twitch) once it is live.')
+        }
+      }
     })
   }
 
@@ -360,6 +369,9 @@ function renderShell(root) {
     slot.querySelector('.livestream-reset')?.addEventListener('click', () => {
       slot.querySelector('input').value = ''
       playSlot(slot, LIVESTREAM_EMBED)
+      if (!LIVESTREAM_EMBED) {
+        showSlotNote(slot, 'Paste the Flight 15 webcast link (YouTube or Twitch) once it is live.')
+      }
       rememberStreams()
     })
     slot.querySelector('.livestream-clear')?.addEventListener('click', () => {
@@ -503,10 +515,10 @@ function officialLiftoffMs(state) {
   const mission = current.mission_time
   const gps = current.gps_time
   if (!Number.isFinite(mission) || !Number.isFinite(gps)) return null
-  if (mission < 1 || mission > 20 * 3600) return null
+  if (mission < 1 || mission > MAX_MISSION_S) return null
   const fixMs = (gps + GPS_TO_UNIX_OFFSET) * 1000
   const liftoff = fixMs - mission * 1000
-  if (liftoff > fixMs || fixMs - liftoff > 20 * 3600 * 1000) return null
+  if (liftoff > fixMs || fixMs - liftoff > MAX_MISSION_S * 1000) return null
   const planned = getMeta().plannedLiftoffMs
   if (typeof planned === 'number' && Math.abs(liftoff - planned) > 30 * 60 * 1000) {
     return null
@@ -565,6 +577,9 @@ function observePad(state, nowMs) {
 
 /** Still on the countdown, including a frozen T- 0:00:00 after the planned time. */
 function holdingCountdown(state) {
+  // Stopped at landing: after a tower catch the ship is back on the pad, but
+  // the flight has happened.
+  if (clockStopped) return false
   if (officialLiftoffMs(state) != null) return false
   if (liftoffConfirmed) return false
   if (startedToMove(state) && !sawOnPad && samplesSeen > 0) return false
@@ -604,7 +619,7 @@ function landedClockSeconds(state) {
     formatAltitudeKm(current.altitude) === '0' &&
     formatSpeedKmh(current.speed) === '0' &&
     Number.isFinite(rangeKm) &&
-    rangeKm >= 5
+    (rangeKm >= 5 || caughtBackAtStarbase(state))
   if (!atRest) return null
   if (Number.isFinite(state.altitudeZeroElapsedSeconds)) {
     rememberAltitudeZero(state.altitudeZeroElapsedSeconds)
@@ -619,6 +634,24 @@ function landedClockSeconds(state) {
     rememberLandedElapsed(current.mission_time, false)
   }
   return landedElapsedSeconds
+}
+
+/**
+ * A tower catch ends the flight at the pad it left from, so "far from the pad"
+ * cannot tell landed from not-yet-launched. Count it once the ship has really
+ * flown: liftoff more than an hour ago, or the shared track shows it at rest.
+ */
+function caughtBackAtStarbase(state) {
+  let meta
+  try {
+    meta = getMeta()
+  } catch {
+    return false
+  }
+  if (meta.landingFix?.kind !== 'catch') return false
+  if (Number.isFinite(state.landedElapsedSeconds)) return true
+  const liftoff = liftoffConfirmed ? liftoffAtMs : meta.actualLiftoffMs
+  return seenFlying && Number.isFinite(liftoff) && Date.now() - liftoff > 3600 * 1000
 }
 
 function missionOffsetSeconds(state, nowMs) {
@@ -829,6 +862,7 @@ async function main() {
   }
 
   const meta = getMeta()
+  const bakedPlannedLiftoffMs = meta.plannedLiftoffMs
   let mapApi = ensureMap(null, !meta.hasFlightPath)
   let latest = { ship: null, loading: true, error: null, lastMovedAt: null }
 
@@ -848,7 +882,13 @@ async function main() {
       const body = await res.json()
       const ms = Date.parse(body?.plannedLiftoff)
       if (!Number.isFinite(ms)) return
-      if (ms < Date.parse('2026-09-27T00:00:00Z') || ms > Date.parse('2026-10-02T00:00:00Z')) {
+      // Ignore a T-0 that belongs to some other flight: accept a day early
+      // through two weeks of slips from the baked target.
+      const baked = bakedPlannedLiftoffMs
+      if (
+        typeof baked === 'number' &&
+        (ms < baked - 86_400_000 || ms > baked + 14 * 86_400_000)
+      ) {
         return
       }
       setPlannedLiftoffMs(ms)

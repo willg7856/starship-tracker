@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const UPSTREAM =
-  'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-14-ship-41-trajectory'
+  'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-15-ship-42-trajectory'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
