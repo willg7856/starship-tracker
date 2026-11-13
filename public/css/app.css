@@ -1427,3 +1427,23 @@ html[data-theme='dark'] {
     font-size: 0.8rem;
   }
 }
+
+/* "Powered by Beyond Stage Zero" in the dark nav bar. */
+.topbar .powered-by {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+}
+
+.topbar .powered-by:hover {
+  color: var(--nav-fg);
+}
+
+.topbar .powered-by .brand-mark {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: #ff5a1f;
+}

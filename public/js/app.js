@@ -170,8 +170,9 @@ function renderShell(root) {
     <div class="app">
       <header class="topbar">
         <div class="topbar-inner">
-          <a class="powered-by nav-brand" href="https://www.beyondstagezero.com/" aria-label="Beyond Stage Zero home">
-            ${BSZ_LOGO}
+          <a class="powered-by" href="https://www.beyondstagezero.com/">
+            <span class="brand-mark" aria-hidden="true"></span>
+            Powered by Beyond Stage Zero
           </a>
           <div class="topbar-metrics">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
