@@ -10,6 +10,7 @@ import {
 } from './path.js'
 import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
 import { startTracker } from './tracker.js'
+import { renderTimeline, setupTimeline } from './timeline.js'
 import {
   GPS_TO_UNIX_OFFSET,
   MAX_MISSION_S,
@@ -181,12 +182,18 @@ function renderShell(root) {
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
             </p>
+            <p class="next-event" aria-live="off" hidden></p>
           </div>
           <div class="masthead-actions">
             <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
               Watch
             </button>
             <button type="button" class="theme-toggle">Dark</button>
+            ${
+              flight.webcastUrl
+                ? `<a class="masthead-link" href="${flight.webcastUrl}" target="_blank" rel="noreferrer">SpaceX webcast</a>`
+                : ''
+            }
             <a class="masthead-link" href="${SPACEX_VEHICLE_TRACKER}" target="_blank" rel="noreferrer">
               SpaceX tracker
             </a>
@@ -201,7 +208,7 @@ function renderShell(root) {
               <h2>Livestreams</h2>
               <p>
                 Two players side by side. Paste a YouTube or Twitch link in either, or start with the
-                <a href="${SPACEX_WEBCAST}" target="_blank" rel="noreferrer">SpaceX webcast</a>
+                <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">SpaceX webcast</a>
                 simulcast.
               </p>
             </div>
@@ -249,6 +256,16 @@ function renderShell(root) {
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
       </section>
 
+      <section class="section timeline" aria-label="Flight timeline" hidden>
+        <div class="section-inner">
+          <div class="timeline-head">
+            <h2>Flight timeline</h2>
+            <p>From SpaceX · all times approximate</p>
+          </div>
+          <ol class="timeline-list"></ol>
+        </div>
+      </section>
+
       <section class="section telemetry" aria-label="Starship telemetry" hidden>
         <div class="section-inner">
           <div class="telemetry-head">
@@ -282,6 +299,8 @@ function renderShell(root) {
       </footer>
     </div>
   `
+
+  setupTimeline(flight.timeline)
 
   document.querySelector('.theme-toggle').addEventListener('click', () => {
     setTheme(getTheme() === 'dark' ? 'light' : 'dark')
@@ -759,6 +778,24 @@ function renderMissionClock(state, nowMs) {
           : 'Countdown to planned liftoff',
   )
   renderSinceLanding(state, nowMs, clockStopped)
+  renderTimeline(offset, { holding, stopped: clockStopped, launched })
+  renderTabTitle(el.textContent, state)
+}
+
+const BASE_TITLE = document.title
+let lastTitle = null
+
+/** Live status in the browser tab: "T+ 0:08:12 · 160 km · Flight 15". */
+function renderTabTitle(clockText, state) {
+  const alt = state?.ship?.current?.altitude
+  const parts = [clockText]
+  if (Number.isFinite(alt)) parts.push(`${formatAltitudeKm(alt)} km`)
+  if (flightLabel) parts.push(flightLabel)
+  const title = clockText && !clockText.includes('—') ? parts.join(' · ') : BASE_TITLE
+  if (title !== lastTitle) {
+    document.title = title
+    lastTitle = title
+  }
 }
 
 function renderLiveReadouts(state) {

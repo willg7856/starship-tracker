@@ -996,3 +996,109 @@ select {
     right: 0.7rem;
   }
 }
+
+/* Next timeline event, under the masthead subtitle. */
+.next-event {
+  margin: 0.55rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.next-event strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* SpaceX flight timeline. */
+.timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.timeline-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2.8vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.timeline-head p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+
+.timeline-list li {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.timeline-list li:last-child {
+  border-bottom: 0;
+}
+
+.tl-time {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding-top: 0.1rem;
+}
+
+.timeline-list li[data-state='done'] {
+  color: var(--muted-2);
+}
+
+.timeline-list li[data-state='done'] .tl-time {
+  color: var(--muted-2);
+}
+
+.timeline-list li[data-state='current'] {
+  background: color-mix(in srgb, var(--signal) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--signal);
+  font-weight: 600;
+}
+
+.timeline-list li[data-state='current'] .tl-time {
+  color: var(--signal);
+}
+
+.timeline-list li[data-state='next'] {
+  box-shadow: inset 3px 0 0 var(--ignition);
+}
+
+.timeline-list li[data-state='next'] .tl-time {
+  color: var(--ignition);
+}
+
+@media (max-width: 560px) {
+  .timeline-list li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
