@@ -38,9 +38,24 @@ function seedFromFlight() {
   }
 }
 
+/** Hazard zones for this flight, if a file was published for it. */
+async function loadHazards() {
+  if (!Number.isFinite(flight.flight)) return []
+  try {
+    const res = await fetch(`/data/flight${flight.flight}-hazards.json`, { cache: 'no-cache' })
+    if (!res.ok) return []
+    const data = await res.json()
+    if (data?.flight !== flight.flight || !Array.isArray(data.noticePolygons)) return []
+    return data.noticePolygons
+  } catch {
+    return []
+  }
+}
+
 export async function loadTrack() {
   if (track) return meta
   track = seedFromFlight()
+  track.noticePolygons = await loadHazards()
   const first = track.points?.[0]
   meta = {
     vehicle: track.vehicle || 'Starship',
