@@ -32,7 +32,24 @@ const SPACEX_WEBCAST = missionPageUrl
  * cannot be embedded). Empty until a simulcast link is published; viewers can
  * paste one in the meantime.
  */
-const LIVESTREAM_EMBED = ''
+/**
+ * SpaceX's own webcast is only on X, which cannot be embedded, so the Watch
+ * panel defaults to a YouTube simulcast of it. Keyed by flight so a stale
+ * stream never shows on the next flight. Muted autoplay is the only kind
+ * browsers allow without a click.
+ */
+const SIMULCASTS = {
+  15: 'F0ltKM5qc7A', // Space.com simulcast of the SpaceX Flight 15 webcast
+}
+const LIVESTREAM_EMBED = SIMULCASTS[flight.flight]
+  ? `https://www.youtube-nocookie.com/embed/${SIMULCASTS[flight.flight]}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
+  : ''
+/** Open the Watch panel by itself from webcast start until well after liftoff. */
+const AUTO_OPEN_FROM_S = -50 * 60
+const AUTO_OPEN_UNTIL_S = 2 * 3600
+const LIVESTREAM_DISMISSED_KEY = 'bsz-livestream-dismissed'
+let openLivestream = null
+let livestreamAutoOpened = false
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
 const PASTE_STREAM_NOTE = `Paste the ${flightLabel || 'Starship'} webcast link (YouTube or Twitch) once it is live.`
 /**
@@ -374,12 +391,25 @@ function renderShell(root) {
     if (open) startSlots()
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
   }
+  const rememberDismissed = () => {
+    try {
+      sessionStorage.setItem(LIVESTREAM_DISMISSED_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }
   watchBtn.addEventListener('click', () => {
-    setLivestreamOpen(livestream.hidden)
+    const open = livestream.hidden
+    if (!open) rememberDismissed()
+    setLivestreamOpen(open)
   })
   livestream.querySelector('.livestream-close').addEventListener('click', () => {
+    rememberDismissed()
     setLivestreamOpen(false)
   })
+  openLivestream = () => {
+    if (livestream.hidden) setLivestreamOpen(true)
+  }
   slots.forEach((slot) => {
     slot.querySelector('form').addEventListener('submit', (event) => {
       event.preventDefault()
@@ -779,7 +809,31 @@ function renderMissionClock(state, nowMs) {
   )
   renderSinceLanding(state, nowMs, clockStopped)
   renderTimeline(offset, { holding, stopped: clockStopped, launched })
+  maybeAutoOpenLivestream()
   renderTabTitle(el.textContent, state)
+}
+
+/** Pop the stream open once per visit while the webcast is on, unless closed. */
+function maybeAutoOpenLivestream() {
+  if (livestreamAutoOpened || !openLivestream || !LIVESTREAM_EMBED || clockStopped) return
+  // Wall clock against SpaceX's T-0 (or the observed liftoff), not the
+  // displayed clock, which sits at T-0 during a hold or a telemetry gap.
+  let t0 = null
+  try {
+    t0 = getMeta().actualLiftoffMs ?? getMeta().plannedLiftoffMs
+  } catch {
+    return
+  }
+  if (!Number.isFinite(t0)) return
+  const offset = (Date.now() - t0) / 1000
+  if (offset < AUTO_OPEN_FROM_S || offset > AUTO_OPEN_UNTIL_S) return
+  livestreamAutoOpened = true
+  try {
+    if (sessionStorage.getItem(LIVESTREAM_DISMISSED_KEY)) return
+  } catch {
+    /* ignore */
+  }
+  openLivestream()
 }
 
 const BASE_TITLE = document.title
