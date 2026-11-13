@@ -4,6 +4,8 @@ const MISSIONS =
   'https://content.spacex.com/cms-assets/future_missions.json'
 const TILES =
   'https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming'
+const MISSION_PAGE =
+  'https://content.spacex.com/api/spacex-website/missions/starship-flight-15'
 
 type LaunchTile = {
   title?: string
@@ -56,5 +58,28 @@ async function readFlightLiftoff() {
   return {
     plannedLiftoff: new Date(seconds * 1000).toISOString().replace('.000Z', 'Z'),
     paused: timing?.TZeroPaused === true,
+    landingMissionTime: await readLandingMissionTime(),
+  }
+}
+
+type TimelineEntry = { time?: string; description?: string }
+
+/** T+ seconds of the landing in SpaceX's published flight timeline. */
+async function readLandingMissionTime(): Promise<number | null> {
+  try {
+    const res = await fetch(MISSION_PAGE, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    const page = (await res.json()) as {
+      postLaunchTimeline?: { timelineEntries?: TimelineEntry[] }
+    }
+    const entries = page.postLaunchTimeline?.timelineEntries ?? []
+    const landing = [...entries]
+      .reverse()
+      .find((e) => /catch|splashdown|landing burn shutdown/i.test(e.description ?? ''))
+    const parts = landing?.time?.split(':').map(Number)
+    if (!parts || parts.length !== 3 || !parts.every(Number.isFinite)) return null
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  } catch {
+    return null
   }
 }

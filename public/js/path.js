@@ -75,6 +75,15 @@ export function setPlannedLiftoffMs(ms) {
   return true
 }
 
+/** Landing T+ seconds from SpaceX's published flight timeline. */
+export function setLandingMissionTime(seconds) {
+  if (!meta || !Number.isFinite(seconds) || seconds <= 0) return false
+  if (meta.splashdownMissionTime === seconds) return false
+  meta.splashdownMissionTime = seconds
+  if (meta.landingFix) meta.landingFix.mission_time = seconds
+  return true
+}
+
 /** Official liftoff from SpaceX mission elapsed time, once the ship is in flight. */
 export function setActualLiftoffMs(ms) {
   if (!meta || !Number.isFinite(ms)) return false

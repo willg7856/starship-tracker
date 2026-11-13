@@ -1,7 +1,13 @@
 import { drawTelemetryCharts, recordTelemetrySample } from './charts.js'
 import { distanceAlongTrailKm, loadLiveTrail } from './trail.js'
 import { createMap } from './map.js'
-import { getMeta, loadTrack, setActualLiftoffMs, setPlannedLiftoffMs } from './path.js'
+import {
+  getMeta,
+  loadTrack,
+  setActualLiftoffMs,
+  setLandingMissionTime,
+  setPlannedLiftoffMs,
+} from './path.js'
 import { startTracker } from './tracker.js'
 import {
   GPS_TO_UNIX_OFFSET,
@@ -880,6 +886,9 @@ async function main() {
       const res = await fetch('/api/launch-time', { cache: 'no-store' })
       if (!res.ok) return
       const body = await res.json()
+      if (Number.isFinite(body?.landingMissionTime)) {
+        setLandingMissionTime(body.landingMissionTime)
+      }
       const ms = Date.parse(body?.plannedLiftoff)
       if (!Number.isFinite(ms)) return
       // Ignore a T-0 that belongs to some other flight: accept a day early
