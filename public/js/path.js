@@ -7,13 +7,13 @@ let meta = null
 
 export async function loadTrack() {
   if (track) return meta
-  const res = await fetch('/data/flight14-ship-track.json')
+  const res = await fetch('/data/flight15-ship-track.json')
   if (!res.ok) throw new Error('Failed to load flight path')
   track = await res.json()
   const first = track.points?.[0]
   meta = {
-    vehicle: track.vehicle || 'Ship 41',
-    flight: track.flight || 14,
+    vehicle: track.vehicle || 'Ship 42',
+    flight: track.flight || 15,
     phase: track.phase || 'prelaunch',
     plannedLiftoffMs: (() => {
       if (typeof track.plannedLiftoff === 'string') {
@@ -25,13 +25,14 @@ export async function loadTrack() {
     launchPad: {
       lat: first?.lat ?? 25.99684,
       lon: first?.lon ?? -97.15804,
-      label: 'Starbase Pad 2',
+      label: track.launchPadLabel || 'Starbase',
     },
     landingFix: track.landingFix
       ? {
           lat: track.landingFix.lat,
           lon: track.landingFix.lon,
           label: track.landingFix.label || 'Planned splashdown',
+          kind: track.landingFix.kind === 'catch' ? 'catch' : 'splashdown',
         }
       : null,
     splashdownMissionTime:
@@ -71,6 +72,15 @@ export function setPlannedLiftoffMs(ms) {
   if (!meta || !Number.isFinite(ms)) return false
   if (meta.plannedLiftoffMs === ms) return false
   meta.plannedLiftoffMs = ms
+  return true
+}
+
+/** Landing T+ seconds from SpaceX's published flight timeline. */
+export function setLandingMissionTime(seconds) {
+  if (!meta || !Number.isFinite(seconds) || seconds <= 0) return false
+  if (meta.splashdownMissionTime === seconds) return false
+  meta.splashdownMissionTime = seconds
+  if (meta.landingFix) meta.landingFix.mission_time = seconds
   return true
 }
 

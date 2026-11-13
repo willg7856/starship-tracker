@@ -1,6 +1,6 @@
 # Starship Tracker
 
-Vanilla JS tracker for SpaceX Starship Flight 14 / Ship 41.
+Vanilla JS tracker for SpaceX Starship Flight 15 / Ship 42.
 
 ## Stack
 
