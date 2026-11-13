@@ -18,6 +18,17 @@ function hazardStyle(notice) {
     text.includes('SPLASHDOWN') ||
     text.includes('RETURN') ||
     text.includes('DEORBIT')
+  // Backup return areas, only used if the ship cannot come home: dashed.
+  if (text.includes('CONTINGENCY')) {
+    return {
+      color: '#b45309',
+      fillColor: '#e0a045',
+      fillOpacity: 0.1,
+      weight: 1,
+      opacity: 0.7,
+      dashArray: '4 4',
+    }
+  }
   // Merged unions use a single outline — no internal section borders.
   if (isReentry) {
     return {
@@ -75,7 +86,8 @@ export function createMap(container, { prelaunch = false } = {}) {
   const notices = getNoticePolygons()
   /** @type {'follow' | 'wide' | 'auto'} */
   let camera = prelaunch ? 'wide' : 'follow'
-  let showHazards = true
+  // Off by default: the zones cover a lot of ocean. The toggle shows them.
+  let showHazards = false
   let fittedCamera = null
   let latestLive = null
   let latestFullPath = []
@@ -319,7 +331,7 @@ export function createMap(container, { prelaunch = false } = {}) {
       '<button type="button" data-camera="follow">Follow</button>' +
       '<button type="button" data-camera="wide">Wide</button>' +
       (getNoticePolygons().length
-        ? '<button type="button" data-hazards="toggle" class="active" aria-pressed="true">Hazards</button>'
+        ? '<button type="button" data-hazards="toggle" aria-pressed="false">Hazards</button>'
         : '')
     shell.append(cameraEl)
     cameraEl.addEventListener('click', (e) => {
