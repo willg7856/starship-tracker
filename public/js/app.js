@@ -162,14 +162,16 @@ function setTheme(theme) {
   }
 }
 
+/** Beyond Stage Zero logo, as on beyondstagezero.com. */
+const BSZ_LOGO = `<span class="brand-logo"><svg class="brand-logo-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" aria-hidden="true"><circle cx="25.6" cy="60" r="18" fill="currentColor"></circle><path d="M45.1 23 L55.1 23 L55.1 97 L45.1 97" fill="none" stroke="currentColor" stroke-width="9"></path><line x1="70.7" y1="82" x2="90.7" y2="38" stroke="currentColor" stroke-width="9"></line><line x1="88.3" y1="82" x2="108.3" y2="38" stroke="currentColor" stroke-width="9"></line></svg><span class="brand-logo-text">Beyond <span class="brand-logo-bracket"><span class="brand-logo-bracket-mark">[</span>Stage Zero<span class="brand-logo-bracket-mark">]</span></span></span></span>`
+
 function renderShell(root) {
   root.innerHTML = `
     <div class="app">
       <header class="topbar">
         <div class="topbar-inner">
-          <a class="powered-by" href="https://www.beyondstagezero.com/">
-            <span class="brand-mark" aria-hidden="true"></span>
-            Powered by Beyond Stage Zero
+          <a class="powered-by nav-brand" href="https://www.beyondstagezero.com/" aria-label="Beyond Stage Zero home">
+            ${BSZ_LOGO}
           </a>
           <div class="topbar-metrics">
             <p class="mission-clock" data-phase="prelaunch" aria-live="polite">T- —</p>
@@ -307,11 +309,24 @@ function renderShell(root) {
 
       <footer class="footer">
         <div class="footer-inner">
-          <a class="brand" href="https://www.beyondstagezero.com/">
-            <span class="brand-mark" aria-hidden="true"></span>
-            <span class="brand-name">Beyond Stage Zero</span>
-          </a>
-          <p>Unofficial tracker · SpaceX public telemetry</p>
+          <div class="footer-about">
+            <a class="nav-brand" href="https://www.beyondstagezero.com/" aria-label="Beyond Stage Zero home">
+              ${BSZ_LOGO}
+            </a>
+            <p>
+              An unofficial live tracker for SpaceX Starship, built by Beyond Stage Zero
+              from SpaceX's public telemetry.
+            </p>
+          </div>
+          <nav class="footer-links" aria-label="Beyond Stage Zero">
+            <a href="https://www.beyondstagezero.com/">Beyond Stage Zero</a>
+            <a href="https://www.beyondstagezero.com/missions">Missions</a>
+            <a href="https://www.beyondstagezero.com/support">Support us</a>
+          </nav>
+        </div>
+        <div class="footer-bottom">
+          <span>© ${new Date().getFullYear()} Beyond Stage Zero</span>
+          <span>Unofficial · SpaceX public telemetry</span>
         </div>
       </footer>
     </div>
@@ -442,6 +457,12 @@ function renderShell(root) {
     document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`)
   }
   syncTopbar()
+  // The bar changes height after web fonts and live readouts arrive (and
+  // wraps on phones); keep the page offset in step so it never covers content.
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => syncTopbar()).observe(topbar)
+  }
+  document.fonts?.ready?.then(syncTopbar).catch(() => {})
   window.addEventListener('resize', () => {
     syncTopbar()
     drawTelemetryCharts()
