@@ -1,3 +1,4 @@
+import { flight, shipLabel } from './flight.js'
 import { haversineKm } from './utils.js'
 
 const MAX_DRIFT_GAP_KM = 1
@@ -5,15 +6,45 @@ const MAX_DRIFT_GAP_KM = 1
 let track = null
 let meta = null
 
+/** Starbase orbital launch pad, used until the ship's pad position is known. */
+const DEFAULT_PAD = { lat: 25.996886, lon: -97.157915 }
+
+/**
+ * Pre-flight setup for the discovered flight: the pad the ship is standing
+ * on, the planned T-0, and (for a tower catch) the planned landing back at
+ * the pad. Everything comes from /api/flight; nothing is baked per flight.
+ */
+function seedFromFlight() {
+  const pad = flight.pad && Number.isFinite(flight.pad.lat) ? flight.pad : DEFAULT_PAD
+  const catchAtPad = flight.landingKind === 'catch'
+  return {
+    vehicle: shipLabel,
+    flight: flight.flight,
+    phase: 'prelaunch',
+    plannedLiftoff: flight.plannedLiftoff,
+    points: [{ t: 0, lat: pad.lat, lon: pad.lon }],
+    landingFix: catchAtPad
+      ? {
+          lat: pad.lat,
+          lon: pad.lon,
+          label: 'Planned tower catch at the launch site',
+          kind: 'catch',
+          mission_time: Number.isFinite(flight.landingMissionTime)
+            ? flight.landingMissionTime
+            : undefined,
+        }
+      : null,
+    noticePolygons: [],
+  }
+}
+
 export async function loadTrack() {
   if (track) return meta
-  const res = await fetch('/data/flight15-ship-track.json')
-  if (!res.ok) throw new Error('Failed to load flight path')
-  track = await res.json()
+  track = seedFromFlight()
   const first = track.points?.[0]
   meta = {
-    vehicle: track.vehicle || 'Ship 42',
-    flight: track.flight || 15,
+    vehicle: track.vehicle || 'Starship',
+    flight: track.flight,
     phase: track.phase || 'prelaunch',
     plannedLiftoffMs: (() => {
       if (typeof track.plannedLiftoff === 'string') {
@@ -23,9 +54,9 @@ export async function loadTrack() {
       return null
     })(),
     launchPad: {
-      lat: first?.lat ?? 25.99684,
-      lon: first?.lon ?? -97.15804,
-      label: track.launchPadLabel || 'Starbase',
+      lat: first?.lat ?? DEFAULT_PAD.lat,
+      lon: first?.lon ?? DEFAULT_PAD.lon,
+      label: 'Starbase',
     },
     landingFix: track.landingFix
       ? {

@@ -1,6 +1,6 @@
 # Starship Tracker
 
-Vanilla JS tracker for SpaceX Starship Flight 15 / Ship 42.
+Vanilla JS tracker for the current SpaceX Starship flight. The flight, ship, T-0 and landing are discovered from SpaceX's website at runtime (`api/_flight.ts`), so a new flight needs no code change.
 
 ## Stack
 

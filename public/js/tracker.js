@@ -1,3 +1,4 @@
+import { flightStorageKey, shipKey } from './flight.js'
 import { getMeta } from './path.js'
 import {
   appendLiveFix,
@@ -14,8 +15,8 @@ import { MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } from './utils.js'
 const POLL_MS = 1_000
 const SPACE_NOTICES_POLL_MS = 60_000
 const SHIP_TRAIL_POLL_MS = 30_000
-const SHIP_KEY = 'ship42'
-const LAST_FIX_KEY = 'bsz-ship42-last-fix-v1'
+const SHIP_KEY = shipKey
+const LAST_FIX_KEY = flightStorageKey('last-fix-v1')
 
 function readLastFix() {
   try {
@@ -80,7 +81,7 @@ function withDerivedSpeed(current) {
  */
 function pickShip(raw) {
   if (!raw || typeof raw !== 'object') return null
-  if (raw[SHIP_KEY]?.current) return raw[SHIP_KEY]
+  if (SHIP_KEY && raw[SHIP_KEY]?.current) return raw[SHIP_KEY]
   const ships = Object.entries(raw).filter(
     ([key, value]) => /^ship\d+$/i.test(key) && value?.current,
   )

@@ -8,6 +8,7 @@ import {
   setLandingMissionTime,
   setPlannedLiftoffMs,
 } from './path.js'
+import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
 import { startTracker } from './tracker.js'
 import {
   GPS_TO_UNIX_OFFSET,
@@ -24,15 +25,15 @@ import {
 } from './utils.js'
 
 const THEME_KEY = 'bsz-theme'
-const SPACEX_WEBCAST =
-  'https://www.spacex.com/launches/starship-flight-15'
+const SPACEX_WEBCAST = missionPageUrl
 /**
- * YouTube simulcast of the SpaceX Flight 15 webcast (the official player
+ * YouTube simulcast of the SpaceX webcast (the official player
  * cannot be embedded). Empty until a simulcast link is published; viewers can
  * paste one in the meantime.
  */
 const LIVESTREAM_EMBED = ''
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
+const PASTE_STREAM_NOTE = `Paste the ${flightLabel || 'Starship'} webcast link (YouTube or Twitch) once it is live.`
 /**
  * Movement off the pad, not the planned clock. SpaceX mission_time already
  * ticks while the ship is sitting at Starbase, so T+ starts only after we
@@ -41,9 +42,9 @@ const LIVESTREAM_KEY = 'bsz-livestream-urls'
 const MOVE_ALT_M = 200
 const MOVE_SPEED_MS = 10
 const MOVE_RANGE_KM = 0.15
-const LIFTOFF_AT_KEY = 'bsz-flight15-liftoff-ms'
-const LANDED_ELAPSED_KEY = 'bsz-flight15-landed-elapsed-s'
-const ALTITUDE_ZERO_KEY = 'bsz-flight15-altitude-zero-s'
+const LIFTOFF_AT_KEY = flightStorageKey('liftoff-ms')
+const LANDED_ELAPSED_KEY = flightStorageKey('landed-elapsed-s')
+const ALTITUDE_ZERO_KEY = flightStorageKey('altitude-zero-s')
 let chartsPainted = false
 let liftoffAtMs = readLiftoffAt()
 let liftoffConfirmed = liftoffAtMs != null
@@ -175,7 +176,7 @@ function renderShell(root) {
           <div class="masthead-brand-block">
             <h1 class="masthead-title">
               Live Starship Tracking
-              <span class="masthead-title-meta">Flight 15</span>
+              <span class="masthead-title-meta">${flightLabel}</span>
             </h1>
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
@@ -224,7 +225,7 @@ function renderShell(root) {
                 <button type="submit">Play</button>
                 ${
                   slot === 0
-                    ? '<button type="button" class="livestream-reset">Flight 15</button>'
+                    ? `<button type="button" class="livestream-reset">${flightLabel || 'Reset'}</button>`
                     : '<button type="button" class="livestream-clear">Clear</button>'
                 }
               </form>
@@ -244,7 +245,7 @@ function renderShell(root) {
         </div>
       </section>
 
-      <section class="map-section" aria-label="Starship Flight 15 map">
+      <section class="map-section" aria-label="Starship ${flightLabel} map">
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
       </section>
 
@@ -341,7 +342,7 @@ function renderShell(root) {
       if (index === 0) {
         playSlot(slot, LIVESTREAM_EMBED)
         if (!LIVESTREAM_EMBED) {
-          showSlotNote(slot, 'Paste the Flight 15 webcast link (YouTube or Twitch) once it is live.')
+          showSlotNote(slot, PASTE_STREAM_NOTE)
         }
       }
     })
@@ -376,7 +377,7 @@ function renderShell(root) {
       slot.querySelector('input').value = ''
       playSlot(slot, LIVESTREAM_EMBED)
       if (!LIVESTREAM_EMBED) {
-        showSlotNote(slot, 'Paste the Flight 15 webcast link (YouTube or Twitch) once it is live.')
+        showSlotNote(slot, PASTE_STREAM_NOTE)
       }
       rememberStreams()
     })
@@ -868,7 +869,6 @@ async function main() {
   }
 
   const meta = getMeta()
-  const bakedPlannedLiftoffMs = meta.plannedLiftoffMs
   let mapApi = ensureMap(null, !meta.hasFlightPath)
   let latest = { ship: null, loading: true, error: null, lastMovedAt: null }
 
@@ -882,28 +882,19 @@ async function main() {
 
   tick(latest)
   const refreshPlannedLiftoff = async () => {
-    try {
-      const res = await fetch('/api/launch-time', { cache: 'no-store' })
-      if (!res.ok) return
-      const body = await res.json()
-      if (Number.isFinite(body?.landingMissionTime)) {
-        setLandingMissionTime(body.landingMissionTime)
-      }
-      const ms = Date.parse(body?.plannedLiftoff)
-      if (!Number.isFinite(ms)) return
-      // Ignore a T-0 that belongs to some other flight: accept a day early
-      // through two weeks of slips from the baked target.
-      const baked = bakedPlannedLiftoffMs
-      if (
-        typeof baked === 'number' &&
-        (ms < baked - 86_400_000 || ms > baked + 14 * 86_400_000)
-      ) {
-        return
-      }
-      setPlannedLiftoffMs(ms)
-    } catch {
-      /* keep the baked target */
+    const info = await fetchFlightInfo()
+    if (!info) return
+    // SpaceX moved on to another flight (36h after liftoff, or a new upcoming
+    // flight before launch): reload so every label and feed follows it.
+    if (Number.isFinite(flight.flight) && info.flight !== flight.flight) {
+      window.location.reload()
+      return
     }
+    if (Number.isFinite(info.landingMissionTime)) {
+      setLandingMissionTime(info.landingMissionTime)
+    }
+    const ms = Date.parse(info.plannedLiftoff)
+    if (Number.isFinite(ms)) setPlannedLiftoffMs(ms)
   }
   void refreshPlannedLiftoff()
   const liftoffPoll = setInterval(() => void refreshPlannedLiftoff(), 20_000)
