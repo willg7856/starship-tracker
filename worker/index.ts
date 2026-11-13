@@ -1,3 +1,5 @@
+import { SPACEX_TRACKER, discoverFlight } from '../api/_flight.js'
+
 type Env = { ASSETS: Fetcher }
 
 type ProxyOptions = {
@@ -39,78 +41,53 @@ async function proxyUpstream({
 }
 
 const VERCEL_ANALYTICS_ORIGIN = 'https://starship-tracker-kappa.vercel.app'
-const FLIGHT_MISSIONS =
-  'https://content.spacex.com/cms-assets/future_missions.json'
-const FLIGHT_TILES =
-  'https://content.spacex.com/api/spacex-website/launches-page-tiles/upcoming'
-const FLIGHT_MISSION_PAGE =
-  'https://content.spacex.com/api/spacex-website/missions/starship-flight-15'
 
-/** T+ seconds of the landing in SpaceX's published flight timeline. */
-async function flightLandingMissionTime(): Promise<number | null> {
+async function flightInfo(): Promise<Response> {
   try {
-    const res = await fetch(FLIGHT_MISSION_PAGE, { headers: { Accept: 'application/json' } })
-    if (!res.ok) return null
-    const page = (await res.json()) as {
-      postLaunchTimeline?: { timelineEntries?: Array<{ time?: string; description?: string }> }
+    const info = await discoverFlight()
+    if (!info) {
+      return Response.json({ error: 'SpaceX lists no Starship flight' }, { status: 502 })
     }
-    const entries = page.postLaunchTimeline?.timelineEntries ?? []
-    const landing = [...entries]
-      .reverse()
-      .find((e) => /catch|splashdown|landing burn shutdown/i.test(e.description ?? ''))
-    const parts = landing?.time?.split(':').map(Number)
-    if (!parts || parts.length !== 3 || !parts.every(Number.isFinite)) return null
-    return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  } catch {
-    return null
+    return Response.json(info, {
+      headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' },
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Upstream fetch failed'
+    return Response.json({ error: message }, { status: 502 })
   }
 }
 
 async function flightLaunchTime(): Promise<Response> {
   try {
-    const [missionsRes, tilesRes] = await Promise.all([
-      fetch(`${FLIGHT_MISSIONS}?t=${Date.now()}`, {
-        headers: { Accept: 'application/json' },
-      }),
-      fetch(FLIGHT_TILES, { headers: { Accept: 'application/json' } }),
-    ])
-    if (!missionsRes.ok || !tilesRes.ok) {
-      return Response.json(
-        { error: 'SpaceX launch time is unavailable' },
-        { status: 502 },
-      )
-    }
-    const missions = (await missionsRes.json()) as Record<
-      string,
-      { TZeroLaunchDate?: { Seconds?: number }; TZeroPaused?: boolean | null }
-    >
-    const tiles = (await tilesRes.json()) as Array<{
-      title?: string
-      link?: string
-      correlationId?: string
-    }>
-    const tile = tiles.find(
-      (item) => item.link === 'starship-flight-15' || item.title === 'Starship Flight 15',
-    )
-    const timing = tile?.correlationId ? missions[tile.correlationId] : undefined
-    const seconds = timing?.TZeroLaunchDate?.Seconds
-    if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
-      return Response.json({ error: 'SpaceX has no Flight 15 T-0' }, { status: 502 })
+    const info = await discoverFlight()
+    if (!info?.plannedLiftoff) {
+      return Response.json({ error: 'SpaceX has no Starship T-0' }, { status: 502 })
     }
     return Response.json(
       {
-        plannedLiftoff: new Date(seconds * 1000).toISOString().replace('.000Z', 'Z'),
-        paused: timing?.TZeroPaused === true,
-        landingMissionTime: await flightLandingMissionTime(),
+        plannedLiftoff: info.plannedLiftoff,
+        paused: info.paused,
+        landingMissionTime: info.landingMissionTime,
+        flight: info.flight,
       },
-      {
-        headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' },
-      },
+      { headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' } },
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'
     return Response.json({ error: message }, { status: 502 })
   }
+}
+
+async function proxyDiscovered(
+  field: 'trajectoryUrl' | 'shipFeedUrl',
+  cacheControl: string,
+  errorLabel: string,
+): Promise<Response> {
+  const upstream = (await discoverFlight().catch(() => null))?.[field]
+  if (!upstream) {
+    return Response.json({ error: 'No ship known for this flight yet' }, { status: 404 })
+  }
+  return proxyUpstream({ upstream, cacheControl, bustCache: true, errorLabel })
 }
 
 async function proxyVercelInsights(request: Request): Promise<Response> {
@@ -152,8 +129,7 @@ export default {
 
     if (pathname === '/api/tracker') {
       return proxyUpstream({
-        upstream:
-          'https://content.spacex.com/cms-assets/starship_tracker_public.json',
+        upstream: SPACEX_TRACKER,
         cacheControl: 'public, max-age=1, s-maxage=1',
         bustCache: true,
         errorLabel: 'SpaceX tracker',
@@ -164,21 +140,16 @@ export default {
       return flightLaunchTime()
     }
 
+    if (pathname === '/api/flight') {
+      return flightInfo()
+    }
+
     if (pathname === '/api/ship-trail') {
-      return proxyUpstream({
-        upstream:
-          'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-15-ship-42-trajectory',
-        cacheControl: 'public, max-age=15, s-maxage=15',
-        errorLabel: 'Ship trail',
-      })
+      return proxyDiscovered('trajectoryUrl', 'public, max-age=15, s-maxage=15', 'Ship trail')
     }
 
     if (pathname === '/api/space-notices-ship') {
-      return proxyUpstream({
-        upstream: 'https://data.space-notices.com/space-notices-data/ship-42',
-        cacheControl: 'public, max-age=30, s-maxage=30',
-        errorLabel: 'Space Notices ship-42 feed',
-      })
+      return proxyDiscovered('shipFeedUrl', 'public, max-age=30, s-maxage=30', 'Space Notices ship feed')
     }
 
     if (pathname.startsWith('/api/')) {

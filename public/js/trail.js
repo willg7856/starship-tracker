@@ -1,3 +1,4 @@
+import { flightStorageKey } from './flight.js'
 import { getFlightTrack, getMeta } from './path.js'
 import {
   formatAltitudeKm,
@@ -7,7 +8,7 @@ import {
   speedBetweenFixes,
 } from './utils.js'
 
-const STORAGE_KEY = 'bsz-ship42-live-trail-v1'
+const STORAGE_KEY = flightStorageKey('live-trail-v1')
 const MAX_POINTS = 20_000
 const MIN_MOVE_M = 40
 

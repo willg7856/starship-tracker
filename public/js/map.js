@@ -508,7 +508,7 @@ export function createMap(container, { prelaunch = false } = {}) {
         source.landing = null
       }
 
-      const shipLabel = meta.vehicle || 'Ship 42'
+      const shipLabel = meta.vehicle || 'Starship'
       source.ship = {
         latlng: live,
         radius: 9,

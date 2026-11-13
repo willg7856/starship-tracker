@@ -1,3 +1,4 @@
+import { flightStorageKey } from './flight.js'
 import { loadLiveTrail } from './trail.js'
 import { getMeta } from './path.js'
 import {
@@ -7,9 +8,9 @@ import {
   speedBetweenFixes,
 } from './utils.js'
 
-const ALTITUDE_ZERO_KEY = 'bsz-flight15-altitude-zero-s'
+const ALTITUDE_ZERO_KEY = flightStorageKey('altitude-zero-s')
 
-const HISTORY_KEY = 'bsz-ship42-telem-v1'
+const HISTORY_KEY = flightStorageKey('telem-v1')
 const MAX_SAMPLES = 5000
 
 let samples = loadHistory()

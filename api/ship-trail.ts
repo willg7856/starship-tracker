@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-
-const UPSTREAM =
-  'https://data.space-notices.com/space-notices-data/trajectory/launch-starship-flight-15-ship-42-trajectory'
+import { discoverFlight } from './_flight.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -10,7 +8,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const upstream = await fetch(UPSTREAM, {
+    const upstreamUrl = (await discoverFlight())?.trajectoryUrl
+    if (!upstreamUrl) {
+      res.status(404).json({ error: 'No ship known for this flight yet' })
+      return
+    }
+    const upstream = await fetch(`${upstreamUrl}?t=${Date.now()}`, {
       headers: { Accept: 'application/json' },
     })
     if (!upstream.ok) {

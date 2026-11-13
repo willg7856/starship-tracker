@@ -3,7 +3,7 @@
 export const GPS_TO_UNIX_OFFSET = 315964800
 export const SPACEX_VEHICLE_TRACKER = 'https://www.spacex.com/vehicle-tracker'
 
-/** Longest flight we treat as real. Flight 15's ship catch is ~22.5h after liftoff. */
+/** Longest flight we treat as real. A ship catch can be ~22.5h after liftoff. */
 export const MAX_MISSION_S = 30 * 3600
 
 export function gpsTimeToDate(gpsTime) {

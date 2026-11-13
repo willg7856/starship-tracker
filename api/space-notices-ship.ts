@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-
-const UPSTREAM =
-  'https://data.space-notices.com/space-notices-data/ship-42'
+import { discoverFlight } from './_flight.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -10,12 +8,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const upstream = await fetch(`${UPSTREAM}?t=${Date.now()}`, {
+    const upstreamUrl = (await discoverFlight())?.shipFeedUrl
+    if (!upstreamUrl) {
+      res.status(404).json({ error: 'No ship known for this flight yet' })
+      return
+    }
+    const upstream = await fetch(`${upstreamUrl}?t=${Date.now()}`, {
       headers: { Accept: 'application/json' },
     })
     if (!upstream.ok) {
       res.status(upstream.status).json({
-        error: `Space Notices ship-42 feed returned ${upstream.status}`,
+        error: `Space Notices ship feed returned ${upstream.status}`,
       })
       return
     }
