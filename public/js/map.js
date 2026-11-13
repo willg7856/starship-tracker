@@ -318,7 +318,9 @@ export function createMap(container, { prelaunch = false } = {}) {
     cameraEl.innerHTML =
       '<button type="button" data-camera="follow">Follow</button>' +
       '<button type="button" data-camera="wide">Wide</button>' +
-      '<button type="button" data-hazards="toggle" class="active" aria-pressed="true">Hazards</button>'
+      (getNoticePolygons().length
+        ? '<button type="button" data-hazards="toggle" class="active" aria-pressed="true">Hazards</button>'
+        : '')
     shell.append(cameraEl)
     cameraEl.addEventListener('click', (e) => {
       const hazardBtn = e.target.closest('button[data-hazards]')

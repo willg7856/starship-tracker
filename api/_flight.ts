@@ -37,6 +37,38 @@ export type FlightInfo = {
   pad: { lat: number; lon: number } | null
   trajectoryUrl: string | null
   shipFeedUrl: string | null
+  /** SpaceX's published event schedule, seconds from liftoff (negative = countdown). */
+  timeline: { t: number; label: string }[]
+  /** Official SpaceX webcast, when the mission page lists one. */
+  webcastUrl: string | null
+}
+
+type Webcast = { videoId?: string; streamingVideoType?: string }
+
+function webcastUrl(webcasts: Webcast[] | undefined): string | null {
+  for (const w of webcasts ?? []) {
+    const id = w.videoId?.trim()
+    if (!id || !/^[\w-]+$/.test(id)) continue
+    const type = (w.streamingVideoType ?? '').toLowerCase()
+    if (type.startsWith('x')) return `https://x.com/i/broadcasts/${id}`
+    if (type.includes('youtube')) return `https://www.youtube.com/watch?v=${id}`
+  }
+  return null
+}
+
+function timelineFrom(pre: Timeline[], post: Timeline[]): { t: number; label: string }[] {
+  const events: { t: number; label: string }[] = []
+  for (const [entries, sign] of [[pre, -1], [post, 1]] as const) {
+    for (const e of entries) {
+      const secs = parseHms(e.time)
+      const label = (e.description ?? '').trim()
+      if (secs == null || !label) continue
+      // The countdown's T-0 line duplicates Liftoff in the flight timeline.
+      if (sign < 0 && secs === 0 && post.length) continue
+      events.push({ t: sign * secs, label })
+    }
+  }
+  return events.sort((a, b) => a.t - b.t)
 }
 
 type Tile = {
@@ -218,7 +250,9 @@ export async function discoverFlight(): Promise<FlightInfo | null> {
   const slug = `starship-flight-${pick.flight}`
   const page = await getJson<{
     title?: string
+    preLaunchTimeline?: { timelineEntries?: Timeline[] }
     postLaunchTimeline?: { timelineEntries?: Timeline[] }
+    webcasts?: Webcast[]
   }>(MISSION_PAGE + slug)
   const ship = trackerShip ?? (await shipFromNotices(pick.flight))
 
@@ -252,6 +286,8 @@ export async function discoverFlight(): Promise<FlightInfo | null> {
     pad: trajectoryUrl ? await padFromTrajectory(trajectoryUrl) : null,
     trajectoryUrl,
     shipFeedUrl: ship ? `${NOTICES}/ship-${ship}` : null,
+    timeline: timelineFrom(page?.preLaunchTimeline?.timelineEntries ?? [], timeline),
+    webcastUrl: webcastUrl(page?.webcasts),
   }
   infoCache = { at: Date.now(), info }
   return info
