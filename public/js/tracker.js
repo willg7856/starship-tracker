@@ -297,7 +297,14 @@ export function startTracker(onChange) {
         applySharedTrail()
         return
       }
-      const ok = await loadFromSpaceNotices()
+      // SpaceX answered but has no ship yet (normal before launch). Space
+      // Notices is only a backup; if it fails, that is not an outage.
+      let ok = false
+      try {
+        ok = await loadFromSpaceNotices()
+      } catch {
+        ok = false
+      }
       if (!ok && !hasLoaded) {
         state.error = null
         // Pre-launch: no ship telemetry yet is expected.

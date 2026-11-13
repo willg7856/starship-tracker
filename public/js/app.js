@@ -948,7 +948,7 @@ function renderStatus(state, nowMs) {
     )}`
     dataState = 'live'
   } else if (!state.loading && !state.ship?.current) {
-    label = 'Updated —'
+    label = 'Waiting for telemetry'
     dataState = 'waiting'
   }
   el.textContent = label
