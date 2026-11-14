@@ -64,6 +64,39 @@ function unwrapRing(ring) {
   return out
 }
 
+/**
+ * Split a [lat, lon] path where it crosses the antimeridian, into pieces
+ * whose longitudes all lie in [-180, 180]. Each cut gets an interpolated
+ * point on the ±180 line so neighbouring pieces meet exactly.
+ */
+export function splitAtAntimeridian(points) {
+  const norm = (lon) => ((((lon + 180) % 360) + 360) % 360) - 180
+  const pieces = []
+  let cur = []
+  let prev = null
+  for (const p of points) {
+    if (!Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue
+    const pt = [p[0], norm(p[1])]
+    if (prev) {
+      const d = pt[1] - prev[1]
+      if (Math.abs(d) > 180) {
+        // Crossing: continue the longitude across the edge, interpolate.
+        const edge = d < 0 ? 180 : -180
+        const lonU = pt[1] + (d < 0 ? 360 : -360)
+        const t = (edge - prev[1]) / (lonU - prev[1])
+        const lat = prev[0] + t * (pt[0] - prev[0])
+        cur.push([lat, edge])
+        pieces.push(cur)
+        cur = [[lat, -edge]]
+      }
+    }
+    cur.push(pt)
+    prev = pt
+  }
+  if (cur.length) pieces.push(cur)
+  return pieces
+}
+
 function shiftLatLng(latlng, lonOffset) {
   return [latlng[0], latlng[1] + lonOffset]
 }
@@ -201,19 +234,21 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   function addPolylineCopies(points, style, bucket) {
     if (!points || points.length < 2) return
-    let unwrapped = unwrapRing(points)
-    // A multi-orbit ground track unwraps through many worlds; anchor it so the
-    // newest point (where the ship marker is) sits in the primary world.
-    const lastLon = unwrapped[unwrapped.length - 1][1]
-    const anchor = Math.round(lastLon / 360) * 360
-    if (anchor !== 0) unwrapped = shiftLatLngs(unwrapped, -anchor)
-    for (const offset of activeWraps) {
-      bucket.push(
-        L.polyline(shiftLatLngs(unwrapped, offset), {
-          ...style,
-          renderer: vectorRenderer,
-        }).addTo(map),
-      )
+    // Cut the path at the antimeridian so every piece lies in [-180, 180]:
+    // a multi-orbit ground track then draws every orbit in the visible
+    // world (one continuous unwrapped line spans many worlds, and only the
+    // few copies around the view were drawn, dropping earlier orbits).
+    const pieces = splitAtAntimeridian(points)
+    for (const piece of pieces) {
+      if (piece.length < 2) continue
+      for (const offset of activeWraps) {
+        bucket.push(
+          L.polyline(shiftLatLngs(piece, offset), {
+            ...style,
+            renderer: vectorRenderer,
+          }).addTo(map),
+        )
+      }
     }
   }
 
