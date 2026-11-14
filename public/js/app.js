@@ -39,33 +39,20 @@ const SPACEX_WEBCAST = missionPageUrl
  * browsers allow without a click.
  */
 const SIMULCASTS = {
-  15: 'F0ltKM5qc7A', // Space.com simulcast of the SpaceX Flight 15 webcast
+  // NASASpaceflight's live coverage of Flight 15 (coast phase onwards).
+  15: 'uyFdbzAcOZw',
 }
 /**
- * Space.com's YouTube channel (VideoFromSpace). Outside the launch window the
- * player shows whatever this channel is streaming live (re-entry and catch
- * coverage, future flights), and YouTube's offline screen between streams.
+ * NASASpaceflight's YouTube channel. For a flight with no stream picked
+ * above, the player shows whatever NSF is streaming live (launch coverage,
+ * Starbase cameras), and YouTube's offline screen between streams.
  */
-const LIVE_CHANNEL = 'UCVTomc35agH1SM6kCKzwW_g'
-const LAUNCH_STREAM_FROM_S = -60 * 60
-const LAUNCH_STREAM_UNTIL_S = 2 * 3600
+const LIVE_CHANNEL = 'UCSUu1lih2RifWkKtDOJdsBA'
 
-/** Seconds from SpaceX's T-0 (or the observed liftoff), by the wall clock. */
-function secondsFromT0() {
-  try {
-    const m = getMeta()
-    const t0 = m.actualLiftoffMs ?? m.plannedLiftoffMs
-    return Number.isFinite(t0) ? (Date.now() - t0) / 1000 : null
-  } catch {
-    return null
-  }
-}
-
-/** The flight's launch simulcast around liftoff, otherwise the live channel. */
+/** The flight's chosen stream, otherwise NSF's live channel. */
 function defaultEmbed() {
   const video = SIMULCASTS[flight.flight]
-  const t = secondsFromT0()
-  if (video && t != null && t >= LAUNCH_STREAM_FROM_S && t <= LAUNCH_STREAM_UNTIL_S) {
+  if (video) {
     return `https://www.youtube-nocookie.com/embed/${video}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
   }
   return `https://www.youtube.com/embed/live_stream?channel=${LIVE_CHANNEL}&autoplay=1&mute=1&playsinline=1`
@@ -260,7 +247,7 @@ function renderShell(root) {
             <div>
               <h2>Livestreams</h2>
               <p>
-                Plays Space.com's live coverage when they're streaming. SpaceX's own broadcast is on X
+                Plays NASASpaceflight's live coverage. SpaceX's own broadcast is on X
                 and can't be embedded:
                 <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">watch SpaceX live on X ↗</a>.
                 Paste a YouTube or Twitch link in either player to swap streams.
