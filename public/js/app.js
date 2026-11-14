@@ -38,35 +38,24 @@ const SPACEX_WEBCAST = missionPageUrl
  * stream never shows on the next flight. Muted autoplay is the only kind
  * browsers allow without a click.
  */
-const SIMULCASTS = {
-  // NASASpaceflight's live coverage of Flight 15 (coast phase onwards).
-  15: 'uyFdbzAcOZw',
-}
-/**
- * NASASpaceflight's YouTube channel. For a flight with no stream picked
- * above, the player shows whatever NSF is streaming live (launch coverage,
- * Starbase cameras), and YouTube's offline screen between streams.
- */
-const LIVE_CHANNEL = 'UCSUu1lih2RifWkKtDOJdsBA'
+/** YouTube streams picked per flight, for flights with no official embed. */
+const SIMULCASTS = {}
 
 /**
- * Player 1: SpaceX's official webcast (embedded the way spacex.com does,
- * from SpaceX's mission data), else the YouTube coverage below.
- * Player 2: the YouTube coverage, when player 1 has the official webcast.
+ * SpaceX's official webcast, embedded the way spacex.com does it (from
+ * SpaceX's mission data); else a YouTube stream picked for the flight.
  */
 function defaultEmbed(slot = 0) {
   const official = flight.webcastEmbedUrl
-  if (slot === 0) return official || youtubeCoverage()
-  return official ? youtubeCoverage() : ''
+  return slot === 0 ? official || youtubeCoverage() : ''
 }
 
-/** The flight's chosen YouTube stream, otherwise NSF's live channel. */
+/** A YouTube stream picked for the flight, if any. */
 function youtubeCoverage() {
   const video = SIMULCASTS[flight.flight]
-  if (video) {
-    return `https://www.youtube-nocookie.com/embed/${video}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
-  }
-  return `https://www.youtube.com/embed/live_stream?channel=${LIVE_CHANNEL}&autoplay=1&mute=1&playsinline=1`
+  return video
+    ? `https://www.youtube-nocookie.com/embed/${video}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
+    : ''
 }
 /** Open the Watch panel by itself from webcast start until well after liftoff. */
 const AUTO_OPEN_FROM_S = -50 * 60
@@ -262,17 +251,17 @@ function renderShell(root) {
               <p>
                 ${
                   flight.webcastEmbedUrl
-                    ? "SpaceX's official webcast, with NASASpaceflight's coverage alongside."
-                    : "NASASpaceflight's live coverage."
+                    ? "SpaceX's official webcast."
+                    : "Live coverage."
                 }
                 <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">Open SpaceX's webcast on X ↗</a>.
-                Paste a YouTube or Twitch link in either player to swap streams.
+                Paste a YouTube or Twitch link to swap streams.
               </p>
             </div>
             <button type="button" class="livestream-close">Close</button>
           </div>
           <div class="livestream-grid">
-            ${[0, 1]
+            ${[0]
               .map(
                 (slot) => `
             <div class="livestream-slot" data-slot="${slot}">
@@ -420,6 +409,7 @@ function renderShell(root) {
       }
       const fallback = defaultEmbed(index)
       if (fallback) playSlot(slot, fallback)
+      else showSlotNote(slot, 'No webcast published yet. Paste a YouTube or Twitch link to watch one.')
     })
   }
 

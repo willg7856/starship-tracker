@@ -1819,3 +1819,15 @@ html.monitoring body {
 .masthead-side .masthead-actions {
   justify-content: flex-start;
 }
+
+/* One player: the official webcast, full width (16:9, capped height). */
+.livestream-grid {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  max-width: min(1180px, calc((100vh - 12rem) * 16 / 9));
+  margin: 0 auto;
+}
+
+.app.monitor .livestream-grid {
+  max-width: none;
+}
