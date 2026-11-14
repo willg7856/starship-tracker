@@ -49,8 +49,19 @@ const SIMULCASTS = {
  */
 const LIVE_CHANNEL = 'UCSUu1lih2RifWkKtDOJdsBA'
 
-/** The flight's chosen stream, otherwise NSF's live channel. */
-function defaultEmbed() {
+/**
+ * Player 1: SpaceX's official webcast (embedded the way spacex.com does,
+ * from SpaceX's mission data), else the YouTube coverage below.
+ * Player 2: the YouTube coverage, when player 1 has the official webcast.
+ */
+function defaultEmbed(slot = 0) {
+  const official = flight.webcastEmbedUrl
+  if (slot === 0) return official || youtubeCoverage()
+  return official ? youtubeCoverage() : ''
+}
+
+/** The flight's chosen YouTube stream, otherwise NSF's live channel. */
+function youtubeCoverage() {
   const video = SIMULCASTS[flight.flight]
   if (video) {
     return `https://www.youtube-nocookie.com/embed/${video}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
@@ -249,9 +260,12 @@ function renderShell(root) {
             <div>
               <h2>Livestreams</h2>
               <p>
-                Plays NASASpaceflight's live coverage. SpaceX's own broadcast is on X
-                and can't be embedded:
-                <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">watch SpaceX live on X ↗</a>.
+                ${
+                  flight.webcastEmbedUrl
+                    ? "SpaceX's official webcast, with NASASpaceflight's coverage alongside."
+                    : "NASASpaceflight's live coverage."
+                }
+                <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">Open SpaceX's webcast on X ↗</a>.
                 Paste a YouTube or Twitch link in either player to swap streams.
               </p>
             </div>
@@ -404,9 +418,8 @@ function renderShell(root) {
         showSlotNote(slot, 'That link can’t be embedded. Use a YouTube or Twitch URL.')
         return
       }
-      if (index === 0) {
-        playSlot(slot, defaultEmbed())
-      }
+      const fallback = defaultEmbed(index)
+      if (fallback) playSlot(slot, fallback)
     })
   }
 
@@ -495,7 +508,7 @@ function renderShell(root) {
     })
     slot.querySelector('.livestream-reset')?.addEventListener('click', () => {
       slot.querySelector('input').value = ''
-      playSlot(slot, defaultEmbed())
+      playSlot(slot, defaultEmbed(0))
       rememberStreams()
     })
     slot.querySelector('.livestream-clear')?.addEventListener('click', () => {
@@ -903,7 +916,8 @@ function renderMissionClock(state, nowMs) {
 
 /** Pop the stream open once per visit while the webcast is on, unless closed. */
 function maybeAutoOpenLivestream() {
-  if (livestreamAutoOpened || !openLivestream || !SIMULCASTS[flight.flight] || clockStopped) return
+  if (livestreamAutoOpened || !openLivestream || clockStopped) return
+  if (!flight.webcastEmbedUrl && !SIMULCASTS[flight.flight]) return
   // Wall clock against SpaceX's T-0 (or the observed liftoff), not the
   // displayed clock, which sits at T-0 during a hold or a telemetry gap.
   let t0 = null
