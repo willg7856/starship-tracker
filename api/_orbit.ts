@@ -64,25 +64,32 @@ function newest(list: Omm[]): Omm | null {
   return [...list].sort((a, b) => epochMs(b) - epochMs(a))[0] ?? null
 }
 
-let cache: { key: string; at: number; value: OrbitInfo | null } | null = null
+export type Orbits = {
+  /** Best orbit for the ship: its own catalogue entry, else the payload's. */
+  best: OrbitInfo | null
+  /** The Starlink batch the ship deployed (SpaceX supplemental orbit). */
+  payload: (OrbitInfo & { name: string }) | null
+}
 
-export async function discoverOrbit(
+let cache: { key: string; at: number; value: Orbits } | null = null
+
+export async function discoverOrbits(
   flight: number,
   ship: number | null,
   plannedLiftoff: string | null,
-): Promise<OrbitInfo | null> {
+): Promise<Orbits> {
+  const empty: Orbits = { best: null, payload: null }
   const liftoffMs = Date.parse(plannedLiftoff ?? '')
-  if (!Number.isFinite(liftoffMs) || Date.now() < liftoffMs) return null
+  if (!Number.isFinite(liftoffMs) || Date.now() < liftoffMs) return empty
   const key = `${flight}/${liftoffMs}`
   // Celestrak asks clients not to re-download unchanged data often. A miss
   // (often a dropped connection) is retried after a minute.
-  const ttl = cache?.value ? 10 * 60_000 : 60_000
+  const ttl = cache?.value.best ? 10 * 60_000 : 60_000
   if (cache && cache.key === key && Date.now() - cache.at < ttl) return cache.value
 
-  let value: OrbitInfo | null = null
-
   const name = `STARSHIP-${flight}`
-  // Both lookups at once: a cold start otherwise waits on them in turn.
+  const shipLabel = ship ? `Ship ${ship}` : 'the ship'
+  // All lookups at once: a cold start otherwise waits on them in turn.
   const [catalogued, supIndex] = await Promise.all([
     getJson<Omm[]>(`${GP}?NAME=${encodeURIComponent(name)}&FORMAT=json`),
     getText(SUP_INDEX),
@@ -92,39 +99,55 @@ export async function discoverOrbit(
       (o) => String(o.OBJECT_NAME).toUpperCase() === name && belongsToFlight(o, liftoffMs),
     ),
   )
-  if (shipOmm) {
-    value = {
-      source: 'celestrak-ship',
-      label: `from ${ship ? `Ship ${ship}` : 'the ship'}'s own orbit in the public satellite catalogue (${name}, via Celestrak)`,
-      omm: shipOmm,
+
+  const files = supIndex
+    ? [...new Set([...supIndex.matchAll(/sup-gp\.php\?FILE=(starlink-g[\w-]+)/gi)].map((m) => m[1]))]
+    : []
+  const lists = await Promise.all(
+    files
+      .slice(0, 8)
+      .map(async (file) => ({
+        file,
+        list: await getJson<Omm[]>(`${SUP}?FILE=${encodeURIComponent(file)}&FORMAT=json`),
+      })),
+  )
+  let payloadOmm: Omm | null = null
+  let payloadFile = ''
+  for (const { file, list } of lists) {
+    const pick = newest((Array.isArray(list) ? list : []).filter((o) => belongsToFlight(o, liftoffMs)))
+    if (pick && (!payloadOmm || epochMs(pick) > epochMs(payloadOmm))) {
+      payloadOmm = pick
+      payloadFile = file
     }
   }
-
-  if (!value) {
-    const files = supIndex
-      ? [...new Set([...supIndex.matchAll(/sup-gp\.php\?FILE=(starlink-g[\w-]+)/gi)].map((m) => m[1]))]
-      : []
-    const lists = await Promise.all(
-      files
-        .slice(0, 8)
-        .map((file) => getJson<Omm[]>(`${SUP}?FILE=${encodeURIComponent(file)}&FORMAT=json`)),
-    )
-    const found: Omm[] = []
-    for (const list of lists) {
-      for (const o of Array.isArray(list) ? list : []) {
-        if (belongsToFlight(o, liftoffMs)) found.push(o)
-      }
-    }
-    const payloadOmm = newest(found)
-    if (payloadOmm) {
-      value = {
-        source: 'spacex-payload',
-        label: `from SpaceX's published orbit for the Starlink satellites ${ship ? `Ship ${ship}` : 'the ship'} deployed, which fly alongside it (via Celestrak)`,
+  const group = /starlink-g(\d+)-(\d+)/i.exec(payloadFile)
+  const payload = payloadOmm
+    ? {
+        source: 'spacex-payload' as const,
+        name: group ? `Starlink Group ${group[1]}-${group[2]}` : 'Starlink satellites',
+        label: `from SpaceX's published orbit for the Starlink satellites ${shipLabel} deployed, which fly alongside it (via Celestrak)`,
         omm: payloadOmm,
       }
-    }
-  }
+    : null
 
+  const best: OrbitInfo | null = shipOmm
+    ? {
+        source: 'celestrak-ship',
+        label: `from ${shipLabel}'s own orbit in the public satellite catalogue (${name}, via Celestrak)`,
+        omm: shipOmm,
+      }
+    : payload
+
+  const value = { best, payload }
   cache = { key, at: Date.now(), value }
   return value
+}
+
+/** Back-compat: just the best orbit for the ship. */
+export async function discoverOrbit(
+  flight: number,
+  ship: number | null,
+  plannedLiftoff: string | null,
+): Promise<OrbitInfo | null> {
+  return (await discoverOrbits(flight, ship, plannedLiftoff)).best
 }

@@ -108,6 +108,7 @@ export function createMap(container, { prelaunch = false } = {}) {
     live: [],
     planned: [],
     booster: [],
+    starlink: [],
     ship: [],
     shipHalo: [],
     launch: [],
@@ -143,7 +144,10 @@ export function createMap(container, { prelaunch = false } = {}) {
     planned: null,
     // Super Heavy, when SpaceX publishes its position.
     booster: null,
+    // The Starlink batch the ship deployed (toggle).
+    starlink: null,
   }
+  let showStarlink = false
 
   const initialCenter = prelaunch
     ? [meta.launchPad.lat, meta.launchPad.lon]
@@ -301,6 +305,25 @@ export function createMap(container, { prelaunch = false } = {}) {
     }
   }
 
+  function rebuildStarlink() {
+    clearLayerList(map, layers.starlink)
+    if (!showStarlink || !source.starlink) return
+    for (const offset of activeWraps) {
+      layers.starlink.push(
+        L.circleMarker(shiftLatLng(source.starlink.latlng, offset), {
+          radius: 6,
+          color: '#1d4ed8',
+          fillColor: '#60a5fa',
+          fillOpacity: 0.95,
+          weight: 2,
+          renderer: vectorRenderer,
+        })
+          .bindPopup(source.starlink.popup)
+          .addTo(map),
+      )
+    }
+  }
+
   function rebuildBooster() {
     clearLayerList(map, layers.booster)
     if (!source.booster) return
@@ -322,6 +345,7 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   function rebuildShip() {
     rebuildBooster()
+    rebuildStarlink()
     clearLayerList(map, layers.ship)
     clearLayerList(map, layers.shipHalo)
     if (!source.ship) return
@@ -378,9 +402,18 @@ export function createMap(container, { prelaunch = false } = {}) {
       '<button type="button" data-camera="wide">Wide</button>' +
       (getNoticePolygons().length
         ? '<button type="button" data-hazards="toggle" aria-pressed="false">Hazards</button>'
-        : '')
+        : '') +
+      '<button type="button" data-starlink="toggle" aria-pressed="false" hidden title="Show the Starlink satellites the ship deployed">Starlinks</button>'
     shell.append(cameraEl)
     cameraEl.addEventListener('click', (e) => {
+      const starlinkBtn = e.target.closest('button[data-starlink]')
+      if (starlinkBtn) {
+        showStarlink = !showStarlink
+        starlinkBtn.classList.toggle('active', showStarlink)
+        starlinkBtn.setAttribute('aria-pressed', String(showStarlink))
+        rebuildStarlink()
+        return
+      }
       const hazardBtn = e.target.closest('button[data-hazards]')
       if (hazardBtn) {
         showHazards = !showHazards
@@ -512,7 +545,20 @@ export function createMap(container, { prelaunch = false } = {}) {
   })
 
   return {
-    update({ ship, liveTrail = [], plannedPath = null, booster = null }) {
+    update({ ship, liveTrail = [], plannedPath = null, booster = null, starlink = null }) {
+      source.starlink = starlink
+        ? {
+            latlng: [starlink.latitude, starlink.longitude],
+            popup: `<strong>${starlink.name}</strong><br>${formatLatLon(
+              starlink.latitude,
+              starlink.longitude,
+            )}<br>${Math.round(starlink.altitude / 1000)} km · ${Math.round(
+              starlink.speed * 3.6,
+            ).toLocaleString('en-US')} km/h<br>From SpaceX's published orbit`,
+          }
+        : null
+      const starlinkBtn = cameraEl?.querySelector('button[data-starlink]')
+      if (starlinkBtn) starlinkBtn.hidden = !starlink
       source.planned = plannedPath && plannedPath.length >= 2 ? plannedPath : null
       source.booster = booster?.current
         ? {

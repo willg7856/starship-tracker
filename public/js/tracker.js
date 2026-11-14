@@ -1,5 +1,5 @@
 import { flightStorageKey, shipKey } from './flight.js'
-import { orbitFixAt, orbitTrail, orbitWindow, plannedReentryPath, refreshOrbit } from './orbit.js'
+import { orbitFixAt, orbitTrail, orbitWindow, plannedReentryPath, refreshOrbit, starlinkFixAt } from './orbit.js'
 import { getMeta } from './path.js'
 import {
   appendLiveFix,
@@ -149,6 +149,7 @@ export function startTracker(onChange) {
 
   const emit = () => {
     state.plannedPath = plannedPathNow()
+    state.starlink = starlinkFixAt(Date.now())
     if (state.ship?.current) {
       if ((state.positionSource === 'spacex' || state.positionSource === 'orbit') && state.fetchedAt) {
         // Prefer telemetry freshness while SpaceX is publishing live fixes.

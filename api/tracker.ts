@@ -1,28 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { fetchSpaceXTracker } from './_flight.js'
 
-const UPSTREAM =
-  'https://content.spacex.com/cms-assets/starship_tracker_public.json'
-
+/** SpaceX's public vehicle tracker, passed through (see SPACEX_TRACKER_SOURCES). */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' })
     return
   }
-
   try {
-    const upstream = await fetch(`${UPSTREAM}?t=${Date.now()}`, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!upstream.ok) {
-      res.status(upstream.status).json({
-        error: `SpaceX tracker returned ${upstream.status}`,
-      })
-      return
-    }
-    const body = await upstream.text()
+    const { status, body } = await fetchSpaceXTracker()
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Cache-Control', 'public, max-age=1, s-maxage=1')
-    res.status(200).send(body)
+    res.setHeader('Cache-Control', status === 200 ? 'public, max-age=1, s-maxage=1' : 'no-store')
+    res.status(status).send(body)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'
     res.status(502).json({ error: message })
