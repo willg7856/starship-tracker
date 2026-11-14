@@ -1386,9 +1386,18 @@ async function main() {
     if (Number.isFinite(ms)) setPlannedLiftoffMs(ms)
   }
   void refreshPlannedLiftoff()
-  // Not in hidden tabs (each check is a request); catch up when shown.
+  // Every 20 s around liftoff (holds, scrubs, T-0 moves); every 2 min
+  // otherwise. Never in hidden tabs (each check is a request); catch up
+  // when shown.
+  let lastFlightCheck = Date.now()
   const liftoffPoll = setInterval(() => {
-    if (!document.hidden) void refreshPlannedLiftoff()
+    if (document.hidden) return
+    const planned = getMeta().plannedLiftoffMs
+    const nearLiftoff =
+      countdownPaused || (Number.isFinite(planned) && Math.abs(Date.now() - planned) < 3600_000)
+    if (!nearLiftoff && Date.now() - lastFlightCheck < 120_000) return
+    lastFlightCheck = Date.now()
+    void refreshPlannedLiftoff()
   }, 20_000)
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) void refreshPlannedLiftoff()
