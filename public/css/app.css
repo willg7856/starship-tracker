@@ -2293,3 +2293,13 @@ html.monitoring .topbar-inner {
 .static-intro a {
   color: var(--ignition);
 }
+
+/* Readable contrast (WCAG AA) on the small orange text in light mode, and
+   dark text on the orange Watch button; dark mode already passes. */
+html:not([data-theme='dark']) .masthead-title-meta {
+  color: #c2410c;
+}
+
+.watch-toggle:not(:hover):not(.active) {
+  color: #0b0d0f;
+}
