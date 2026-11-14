@@ -52,6 +52,7 @@ const LIVESTREAM_DISMISSED_KEY = 'bsz-livestream-dismissed'
 let openLivestream = null
 let livestreamAutoOpened = false
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
+const SPLIT_KEY = 'bsz-split-view'
 const PASTE_STREAM_NOTE = `Paste the ${flightLabel || 'Starship'} webcast link (YouTube or Twitch) once it is live.`
 /**
  * Movement off the pad, not the planned clock. SpaceX mission_time already
@@ -210,6 +211,7 @@ function renderShell(root) {
             <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
               Watch
             </button>
+            <button type="button" class="split-toggle" aria-pressed="false" title="Stream on the left, map on the right">Split view</button>
             <button type="button" class="theme-toggle">Dark</button>
             ${
               flight.webcastUrl
@@ -223,6 +225,7 @@ function renderShell(root) {
         </div>
       </header>
 
+      <div class="stage">
       <section class="livestream" id="livestream" aria-label="Livestreams" hidden>
         <div class="livestream-inner">
           <div class="livestream-head">
@@ -277,6 +280,7 @@ function renderShell(root) {
       <section class="map-section" aria-label="Starship ${flightLabel} map">
         <div class="map-skeleton"><p>Acquiring telemetry…</p></div>
       </section>
+      </div>
 
       <section class="section timeline" aria-label="Flight timeline" hidden>
         <div class="section-inner">
@@ -402,12 +406,44 @@ function renderShell(root) {
     })
   }
 
+  const appEl = document.querySelector('.app')
+  const splitBtn = document.querySelector('.split-toggle')
+  const setSplit = (on, { remember = true } = {}) => {
+    appEl.classList.toggle('split', on)
+    splitBtn.classList.toggle('active', on)
+    splitBtn.setAttribute('aria-pressed', String(on))
+    if (remember) {
+      try {
+        localStorage.setItem(SPLIT_KEY, on ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+    }
+    if (on && livestream.hidden) setLivestreamOpen(true)
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'))
+      if (on) {
+        // Fill the screen under the fixed top bar.
+        const stage = document.querySelector('.stage')
+        const topbarH = document.querySelector('.topbar')?.offsetHeight ?? 0
+        window.scrollTo({ top: stage.getBoundingClientRect().top + window.scrollY - topbarH, behavior: 'smooth' })
+      }
+    })
+  }
   const setLivestreamOpen = (open) => {
     livestream.hidden = !open
     watchBtn.setAttribute('aria-expanded', String(open))
     watchBtn.classList.toggle('active', open)
     if (open) startSlots()
+    // Split view needs the stream; closing the stream leaves it.
+    if (!open && appEl.classList.contains('split')) setSplit(false)
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
+  }
+  splitBtn.addEventListener('click', () => setSplit(!appEl.classList.contains('split')))
+  try {
+    if (localStorage.getItem(SPLIT_KEY) === '1') setSplit(true, { remember: false })
+  } catch {
+    /* ignore */
   }
   const rememberDismissed = () => {
     try {
