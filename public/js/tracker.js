@@ -21,7 +21,12 @@ import {
 } from './trail.js'
 import { GPS_TO_UNIX_OFFSET, MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } from './utils.js'
 
-const POLL_MS = 1_000
+// SpaceX's tracker updates about every 30 s: 2 s polls pick a new fix up
+// quickly. With no live ship (before launch, after the flight, tracker
+// off) poll more gently, and not at all while the tab is hidden: every
+// poll is a CDN request, multiplied by every viewer.
+const POLL_MS = 2_000
+const IDLE_POLL_MS = 10_000
 // The Space Notices trail only changes when there is real flight data.
 const SHIP_TRAIL_POLL_MS = 120_000
 const SHIP_KEY = shipKey
@@ -426,13 +431,33 @@ export function startTracker(onChange) {
   const orbitId = setInterval(syncOrbit, 10 * 60_000)
   void load()
   void loadSharedTrail()
-  const pollId = setInterval(() => void load(), POLL_MS)
-  const trailId = setInterval(() => void loadSharedTrail(), SHIP_TRAIL_POLL_MS)
+  let pollId = null
+  const schedulePoll = () => {
+    clearTimeout(pollId)
+    if (controller.signal.aborted || document.hidden) return
+    pollId = setTimeout(
+      () => void load().finally(schedulePoll),
+      positionSource === 'spacex' ? POLL_MS : IDLE_POLL_MS,
+    )
+  }
+  const onVisibility = () => {
+    if (document.hidden) {
+      clearTimeout(pollId)
+    } else {
+      void load().finally(schedulePoll)
+    }
+  }
+  document.addEventListener('visibilitychange', onVisibility)
+  schedulePoll()
+  const trailId = setInterval(() => {
+    if (!document.hidden) void loadSharedTrail()
+  }, SHIP_TRAIL_POLL_MS)
 
   return () => {
     clearInterval(orbitId)
     controller.abort()
-    clearInterval(pollId)
+    clearTimeout(pollId)
+    document.removeEventListener('visibilitychange', onVisibility)
     clearInterval(trailId)
   }
 }

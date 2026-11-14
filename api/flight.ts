@@ -13,7 +13,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(502).json({ error: 'SpaceX lists no Starship flight' })
       return
     }
-    res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=15')
+    res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60')
     res.status(200).json(info)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'

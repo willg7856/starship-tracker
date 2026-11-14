@@ -2252,3 +2252,25 @@ html[data-theme='dark'] {
 html.monitoring .topbar-inner {
   max-width: none;
 }
+
+/* Phones: keep the map buttons on screen and clear of the zoom control. */
+.map-camera-controls button {
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .map-camera-controls {
+    left: 3.3rem;
+    right: 0.6rem;
+    top: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .map-camera-controls button {
+    flex: 1 1 auto;
+    padding: 0.5rem 0.55rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+  }
+}

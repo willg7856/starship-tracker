@@ -4,6 +4,7 @@ import {
   getNoticePolygons,
 } from './path.js'
 import { thinLatLonPath } from './trail.js'
+import { allStarlinkPositions, loadAllStarlinks } from './starlinks-all.js'
 import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const FOLLOW_ZOOM = 8
@@ -340,6 +341,92 @@ export function createMap(container, { prelaunch = false } = {}) {
     }
   }
 
+  /*
+   * Every active Starlink satellite as small dots (no trails), drawn on one
+   * canvas in its own pane under the ship's line and markers. Positioned the
+   * way Leaflet's own canvas renderer is: reset on move/zoom end, hidden
+   * during zoom animation, so panning stays smooth with ~10,000 dots.
+   */
+  const allPane = map.createPane('allStarlinks')
+  allPane.style.zIndex = '350'
+  allPane.style.pointerEvents = 'none'
+  const allCanvas = L.DomUtil.create('canvas', 'all-starlinks-canvas', allPane)
+  let allDots = null
+  let showAll = false
+  let allTimer = null
+
+  function drawAllStarlinks() {
+    const size = map.getSize()
+    const dpr = window.devicePixelRatio || 1
+    L.DomUtil.setPosition(allCanvas, map.containerPointToLayerPoint([0, 0]))
+    allCanvas.width = Math.round(size.x * dpr)
+    allCanvas.height = Math.round(size.y * dpr)
+    allCanvas.style.width = `${size.x}px`
+    allCanvas.style.height = `${size.y}px`
+    const ctx = allCanvas.getContext('2d')
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, size.x, size.y)
+    if (!showAll || !allDots || !allDots.length) return
+    const dark = document.documentElement.dataset.theme === 'dark'
+    ctx.fillStyle = dark ? 'rgba(147, 197, 253, 0.75)' : 'rgba(37, 99, 235, 0.6)'
+    const b = map.getBounds()
+    const west = b.getWest() - 2
+    const east = b.getEast() + 2
+    const south = b.getSouth() - 2
+    const north = b.getNorth() + 2
+    const r = map.getZoom() >= 5 ? 1.6 : 1.1
+    for (let i = 0; i < allDots.length; i += 2) {
+      const lat = allDots[i]
+      if (lat < south || lat > north) continue
+      const lon = allDots[i + 1]
+      for (const offset of activeWraps) {
+        const x = lon + offset
+        if (x < west || x > east) continue
+        const p = map.latLngToContainerPoint([lat, x])
+        ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2)
+      }
+    }
+  }
+  map.on('zoomstart', () => {
+    allCanvas.style.visibility = 'hidden'
+  })
+  map.on('moveend zoomend resize viewreset', () => {
+    allCanvas.style.visibility = ''
+    if (showAll) drawAllStarlinks()
+  })
+
+  async function toggleAllStarlinks(btn) {
+    showAll = !showAll
+    btn.classList.toggle('active', showAll)
+    btn.setAttribute('aria-pressed', String(showAll))
+    clearInterval(allTimer)
+    if (!showAll) {
+      drawAllStarlinks()
+      btn.textContent = 'All Starlinks'
+      return
+    }
+    btn.textContent = 'Loading…'
+    try {
+      const count = await loadAllStarlinks()
+      if (!showAll) return
+      btn.textContent = `All Starlinks · ${count.toLocaleString('en-US')}`
+      const refresh = () => {
+        allDots = allStarlinkPositions(Date.now())
+        drawAllStarlinks()
+      }
+      refresh()
+      allTimer = setInterval(refresh, 5000)
+    } catch {
+      showAll = false
+      btn.classList.remove('active')
+      btn.setAttribute('aria-pressed', 'false')
+      btn.textContent = 'All Starlinks (unavailable)'
+      setTimeout(() => {
+        btn.textContent = 'All Starlinks'
+      }, 4000)
+    }
+  }
+
   function rebuildStarlink() {
     clearLayerList(map, layers.starlink)
     if (!showStarlink || !source.starlink) return
@@ -468,9 +555,15 @@ export function createMap(container, { prelaunch = false } = {}) {
       (getNoticePolygons().length
         ? '<button type="button" data-hazards="toggle" aria-pressed="false">Hazards</button>'
         : '') +
-      '<button type="button" data-starlink="toggle" aria-pressed="false" hidden title="Show the Starlink satellites the ship deployed">Starlinks</button>'
+      '<button type="button" data-starlink="toggle" aria-pressed="false" hidden title="Show the Starlink satellites the ship deployed">Starlinks</button>' +
+      '<button type="button" data-all-starlinks="toggle" aria-pressed="false" title="Show every active Starlink satellite (Celestrak)">All Starlinks</button>'
     shell.append(cameraEl)
     cameraEl.addEventListener('click', (e) => {
+      const allBtn = e.target.closest('button[data-all-starlinks]')
+      if (allBtn) {
+        void toggleAllStarlinks(allBtn)
+        return
+      }
       const starlinkBtn = e.target.closest('button[data-starlink]')
       if (starlinkBtn) {
         showStarlink = !showStarlink
