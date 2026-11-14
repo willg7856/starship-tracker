@@ -234,7 +234,32 @@ export function startTracker(onChange) {
       // Stop a little before the first live fix so the two join cleanly.
       backfill = { key, points: reconstructedPath(firstMs - 20_000) }
     }
-    return backfill.points.length ? backfill.points.concat(trail) : trail
+    return (backfill.points.length ? backfill.points : []).concat(fillGaps(trail))
+  }
+
+  /**
+   * Live fixes saved from an earlier visit leave a gap until this one; a
+   * straight line across it would cut across the map. Fill gaps longer than
+   * 2 minutes from the published orbit.
+   */
+  let gapCache = { key: null, points: [] }
+  function fillGaps(trail) {
+    if (trail.length < 2) return trail
+    const key = `${orbitVersion}/${trail.length}/${Math.round(trail[trail.length - 1].gps_time)}`
+    if (gapCache.key === key) return gapCache.points
+    const toMs = (gps) => (gps + GPS_TO_UNIX_OFFSET - 18) * 1000
+    const out = [trail[0]]
+    for (let i = 1; i < trail.length; i++) {
+      const a = trail[i - 1]
+      const b = trail[i]
+      if (b.gps_time - a.gps_time > 120) {
+        const mid = reconstructedPath(toMs(b.gps_time) - 15_000, 30, toMs(a.gps_time) + 15_000)
+        for (const p of mid) out.push(p)
+      }
+      out.push(b)
+    }
+    gapCache = { key, points: out }
+    return out
   }
 
   const controller = new AbortController()

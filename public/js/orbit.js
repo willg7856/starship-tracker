@@ -376,7 +376,7 @@ export function orbitFixAt(ms) {
  * engine cutoff on (within ~30 km of SpaceX's live fixes on Flight 15).
  * gps_time uses true GPS time like SpaceX's tracker (18 s ahead of UTC).
  */
-export function reconstructedPath(untilMs, stepS = TRAIL_STEP_S) {
+export function reconstructedPath(untilMs, stepS = TRAIL_STEP_S, fromMs = null) {
   const t0 = liftoffMs()
   if (!orbit || !Number.isFinite(t0) || !Number.isFinite(untilMs)) return []
   let pad
@@ -387,9 +387,13 @@ export function reconstructedPath(untilMs, stepS = TRAIL_STEP_S) {
   }
   const w = orbitWindow()
   const gps = (ms) => ms / 1000 - GPS_TO_UNIX_OFFSET + 18
-  const out = [{ gps_time: gps(t0), latitude: pad.lat, longitude: pad.lon, altitude: 0 }]
+  // From liftoff (starting at the pad), or a gap's start when given.
+  const out = Number.isFinite(fromMs)
+    ? []
+    : [{ gps_time: gps(t0), latitude: pad.lat, longitude: pad.lon, altitude: 0 }]
   const end = Math.min(untilMs, t0 + w.to * 1000)
-  for (let ms = t0 + w.from * 1000; ms <= end; ms += stepS * 1000) {
+  const start = Number.isFinite(fromMs) ? Math.max(fromMs, t0 + w.from * 1000) : t0 + w.from * 1000
+  for (let ms = start; ms <= end; ms += stepS * 1000) {
     const date = new Date(ms)
     const pv = sat.propagate(orbit.satrec, date)
     if (!pv?.position || typeof pv.position === 'boolean') continue
