@@ -7,8 +7,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Live Starship Tracking, powered by Beyond Stage Zero. Live SpaceX public vehicle telemetry for the current Starship flight."
+      content="Live Starship tracker: follow the current SpaceX Starship flight in real time on a map, with live position, altitude and speed from SpaceX's own telemetry, the flight timeline, re-entry and catch countdowns and the official SpaceX stream."
     />
+    <link rel="canonical" href="https://starship.beyondstagezero.com/" />
+    <meta name="theme-color" content="#12141a" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Beyond Stage Zero" />
+    <meta property="og:url" content="https://starship.beyondstagezero.com/" />
+    <meta property="og:title" content="Live Starship Tracker — Beyond Stage Zero" />
+    <meta
+      property="og:description"
+      content="Follow the current SpaceX Starship flight live: position, altitude, speed, flight timeline and the official stream."
+    />
+    <meta property="og:image" content="https://starship.beyondstagezero.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Starship Tracker: live position, altitude, speed and flight timeline" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Live Starship Tracker — Beyond Stage Zero" />
+    <meta
+      name="twitter:description"
+      content="Follow the current SpaceX Starship flight live: position, altitude, speed, flight timeline and the official stream."
+    />
+    <meta name="twitter:image" content="https://starship.beyondstagezero.com/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Live Starship Tracker",
+        "alternateName": "Starship Tracker",
+        "url": "https://starship.beyondstagezero.com/",
+        "description": "Follow the current SpaceX Starship flight live on a map: position, altitude and speed from SpaceX's public telemetry, the flight timeline, re-entry and catch countdowns and the official SpaceX stream.",
+        "applicationCategory": "ReferenceApplication",
+        "operatingSystem": "Any",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Beyond Stage Zero",
+          "url": "https://beyondstagezero.com/"
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,7 +62,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="/css/app.css" />
-    <title>Live Starship Tracking — Beyond Stage Zero</title>
+    <title>Live Starship Tracker — Beyond Stage Zero</title>
     <script>
       ;(function () {
         try {
@@ -41,7 +81,26 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Replaced by the live tracker as soon as it loads; this is what
+           search engines and no-JavaScript visitors read. -->
+      <main class="static-intro">
+        <h1>Live Starship Tracker</h1>
+        <p>
+          Follow the current SpaceX Starship flight in real time: where the ship is on the map, its
+          altitude and speed from SpaceX's own public telemetry, the full trajectory so far, and
+          the Super Heavy booster after separation.
+        </p>
+        <p>
+          The flight timeline counts down to every milestone (engine burns, Starlink deployment,
+          re-entry and the catch at Starbase) and the official SpaceX livestream opens
+          automatically around launch and landing. When SpaceX's live data pauses, the tracker
+          estimates the ship's position from its published orbit.
+        </p>
+        <p>Loading the live tracker…</p>
+        <p>Powered by <a href="https://beyondstagezero.com/">Beyond Stage Zero</a>.</p>
+      </main>
+    </div>
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
