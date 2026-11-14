@@ -6,7 +6,8 @@
 
 let events = []
 let listEl = null
-let nextEl = null
+// The "Next · … in m:ss" lines (masthead, and the Fullscreen timeline strip).
+let nextEls = []
 let lastCurrent = null
 let lastNextText = null
 let userScrolledAt = 0
@@ -45,7 +46,7 @@ export function setupTimeline(timeline) {
     : []
   const section = document.querySelector('.timeline')
   listEl = document.querySelector('.timeline-list')
-  nextEl = document.querySelector('.next-event')
+  nextEls = [...document.querySelectorAll('.next-event')]
   if (!section || !listEl || !events.length) return
   listEl.innerHTML = events
     .map(
@@ -118,7 +119,7 @@ export function renderTimeline(missionSeconds, { holding, stopped, launched }) {
     lastCurrent = current
   }
 
-  if (!nextEl) return
+  if (!nextEls.length) return
   let text = ''
   if (!stopped && known && next >= 0) {
     const e = events[next]
@@ -129,8 +130,10 @@ export function renderTimeline(missionSeconds, { holding, stopped, launched }) {
         : `Next · <strong>${label}</strong> in ${formatCountdown(e.t - now)}`
   }
   if (text !== lastNextText) {
-    nextEl.innerHTML = text
-    nextEl.hidden = !text
+    for (const el of nextEls) {
+      el.innerHTML = text
+      el.hidden = !text
+    }
     lastNextText = text
   }
 }

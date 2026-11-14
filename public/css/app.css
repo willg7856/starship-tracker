@@ -2146,3 +2146,19 @@ html[data-theme='dark'] {
 ::-webkit-scrollbar-corner {
   background: var(--scrollbar-track);
 }
+
+/* Next milestone countdown in the Fullscreen timeline strip (the masthead
+ * line is hidden there). */
+.next-event--monitor {
+  display: none;
+}
+
+.app.monitor .next-event--monitor:not([hidden]) {
+  display: block;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.app.monitor .timeline-source {
+  display: none;
+}
