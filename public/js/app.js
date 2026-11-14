@@ -10,7 +10,7 @@ import {
 import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
 import { startTracker } from './tracker.js'
 import { renderTimeline, setupTimeline } from './timeline.js'
-import { orbitSource, orbitWindow, starlinkFixAt } from './orbit.js'
+import { orbitPeriodS, orbitSource, orbitWindow, starlinkFixAt } from './orbit.js'
 import {
   GPS_TO_UNIX_OFFSET,
   MAX_MISSION_S,
@@ -329,6 +329,7 @@ function renderShell(root) {
       </section>
       </div>
 
+      <div class="lower">
       <section class="section timeline" aria-label="Flight timeline" hidden>
         <div class="section-inner">
           <div class="timeline-head">
@@ -362,6 +363,7 @@ function renderShell(root) {
           </div>
         </div>
       </section>
+      </div>
 
       <footer class="footer">
         <div class="footer-inner">
@@ -1070,23 +1072,80 @@ function renderTelemetry(state) {
   if (current.estimated === 'reentry' || current.estimated === 'plan') {
     traveled = '—'
     traveledNote = 'estimate'
-  } else if (Number.isFinite(current.speed) && current.speed > 1000 && Number.isFinite(current.mission_time)) {
+  } else if (Number.isFinite(current.mission_time) && orbitalSpeed(state, current)) {
     // On orbit: distance flown since engine cutoff. Used for estimates, and
     // for live data when this browser has only seen part of the flight.
     const onOrbitS = Math.max(0, current.mission_time - orbitWindow().from)
-    const orbitKm = (current.speed * onOrbitS) / 1000
+    const orbitKm = (orbitalSpeed(state, current) * onOrbitS) / 1000
     if (current.estimated || (onOrbitS > 600 && traveledKm < orbitKm * 0.5)) {
       traveled = `≈ ${formatDownrange(orbitKm)}`
       traveledNote = 'on orbit'
     }
   }
 
+  const extra = flightProgress(state, current)
   const grid = document.querySelector('.telemetry-grid')
-  grid.innerHTML = `
+  const html = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
     <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
     <div><dt>Traveled</dt><dd>${traveled} <span>${traveledNote}</span></dd></div>
+    ${extra.map(([k, v, note]) => `<div><dt>${k}</dt><dd>${v}${note ? ` <span>${note}</span>` : ''}</dd></div>`).join('')}
   `
+  if (grid.innerHTML !== html) grid.innerHTML = html
+}
+
+/**
+ * The ship's speed on orbit (m/s). SpaceX's feed needs two fixes (~30 s)
+ * before a speed can be measured; meanwhile, on orbit, use the Starlink
+ * batch's speed, which matched the ship's to within ~40 km/h on Flight 15.
+ */
+function orbitalSpeed(state, current) {
+  if (Number.isFinite(current.speed) && current.speed > 1000) return current.speed
+  if (Number.isFinite(current.altitude) && current.altitude > 100_000) {
+    return Number.isFinite(state.starlink?.speed) ? state.starlink.speed : 7340
+  }
+  return null
+}
+
+/**
+ * Orbit count, countdown to landing, and where the numbers come from.
+ * Returns [label, value, note] rows.
+ */
+function flightProgress(state, current) {
+  const rows = []
+  let met = null
+  try {
+    const m = getMeta()
+    const t0 = m.actualLiftoffMs ?? m.plannedLiftoffMs
+    if (Number.isFinite(t0)) met = (Date.now() - t0) / 1000
+  } catch {
+    met = null
+  }
+  const w = orbitWindow()
+  const insertion = (flight.timeline || []).find((e) => /orbital insertion burn shutdown|insertion/i.test(e.label))?.t ?? w.from
+  if (Number.isFinite(met) && met >= insertion && met < w.deorbit) {
+    const period = orbitPeriodS()
+    const n = Math.floor((met - insertion) / period) + 1
+    const total = Math.max(n, Math.ceil((w.deorbit - insertion) / period))
+    rows.push(['Orbit', `${n} <span>of ~${total}</span>`, `${(period / 60).toFixed(1)} min each`])
+  }
+  if (Number.isFinite(met) && Number.isFinite(w.landing)) {
+    const word = flight.landingKind === 'catch' ? 'Catch' : flight.landingKind === 'splashdown' ? 'Splashdown' : 'Landing'
+    const left = w.landing - met
+    if (left > 0 && met > 0) {
+      const h = Math.floor(left / 3600)
+      const mm = String(Math.floor((left % 3600) / 60)).padStart(2, '0')
+      const ss = String(Math.floor(left % 60)).padStart(2, '0')
+      rows.push([`${word} in`, `${h}:${mm}:${ss}`, 'planned'])
+    }
+  }
+  if (state.positionSource === 'spacex' && Number.isFinite(current.gps_time)) {
+    const age = Math.max(0, Math.round(Date.now() / 1000 - (current.gps_time + GPS_TO_UNIX_OFFSET - GPS_LEAP_SECONDS)))
+    rows.push(['Source', 'SpaceX live', `fix ${age}s old`])
+  } else if (current.estimated) {
+    rows.push(['Source', 'Estimate', orbitSource()?.phase === 'orbit' ? 'published orbit' : 'flight plan'])
+  }
+  return rows
 }
 
 /**

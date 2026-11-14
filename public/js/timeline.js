@@ -60,6 +60,15 @@ export function setupTimeline(timeline) {
   listEl.addEventListener('scroll', () => {
     if (!listEl._autoScrolling) userScrolledAt = Date.now()
   })
+  // Layout changes (Fullscreen, resizing) move the list: re-centre the
+  // current event.
+  let resizeTimer = null
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(() => {
+      if (lastCurrent != null) scrollListTo(Math.max(0, lastCurrent))
+    }, 150)
+  })
 }
 
 /** Scroll the list (not the page) so the current event sits near the top. */
@@ -67,7 +76,9 @@ function scrollListTo(index) {
   if (!listEl || Date.now() - userScrolledAt < 20_000) return
   const item = listEl.children[index]
   if (!item) return
-  const target = Math.max(0, item.offsetTop - listEl.offsetTop - listEl.clientHeight / 3)
+  // Measure on screen: offsetTop depends on the surrounding layout.
+  const itemTop = item.getBoundingClientRect().top - listEl.getBoundingClientRect().top + listEl.scrollTop
+  const target = Math.max(0, itemTop - listEl.clientHeight / 3)
   listEl._autoScrolling = true
   listEl.scrollTo({ top: target, behavior: 'smooth' })
   setTimeout(() => {
