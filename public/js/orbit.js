@@ -25,7 +25,8 @@ const EARTH_R = 6378.137 // km
 const MODEL_ALT_KM = 270
 const MODEL_INC_DEG = 30.5
 const TRAIL_STEP_S = 30
-const TRAIL_MAX_S = 3 * 3600
+// The whole flight (up to the 36 h a flight stays current).
+const TRAIL_MAX_S = 36 * 3600
 
 let orbit = null // { source, label, satrec }
 // The Starlink batch the ship deployed, tracked on its own for comparison.
@@ -363,7 +364,41 @@ export function orbitFixAt(ms) {
   }
 }
 
-/** Ground track flown so far (last few hours, up to the catch), oldest first. */
+/**
+ * The path flown before `untilMs`, rebuilt for the time before this browser
+ * saw any live fix: the launch pad at liftoff, then the published orbit from
+ * engine cutoff on (within ~30 km of SpaceX's live fixes on Flight 15).
+ * gps_time uses true GPS time like SpaceX's tracker (18 s ahead of UTC).
+ */
+export function reconstructedPath(untilMs, stepS = TRAIL_STEP_S) {
+  const t0 = liftoffMs()
+  if (!orbit || !Number.isFinite(t0) || !Number.isFinite(untilMs)) return []
+  let pad
+  try {
+    pad = getMeta().launchPad
+  } catch {
+    return []
+  }
+  const w = orbitWindow()
+  const gps = (ms) => ms / 1000 - GPS_TO_UNIX_OFFSET + 18
+  const out = [{ gps_time: gps(t0), latitude: pad.lat, longitude: pad.lon, altitude: 0 }]
+  const end = Math.min(untilMs, t0 + w.to * 1000)
+  for (let ms = t0 + w.from * 1000; ms <= end; ms += stepS * 1000) {
+    const date = new Date(ms)
+    const pv = sat.propagate(orbit.satrec, date)
+    if (!pv?.position || typeof pv.position === 'boolean') continue
+    const gd = sat.eciToGeodetic(pv.position, sat.gstime(date))
+    out.push({
+      gps_time: gps(ms),
+      latitude: sat.degreesLat(gd.latitude),
+      longitude: sat.degreesLong(gd.longitude),
+      altitude: gd.height * 1000,
+    })
+  }
+  return out
+}
+
+/** Ground track flown so far (whole flight, up to the catch), oldest first. */
 export function orbitTrail(nowMs) {
   const t0 = liftoffMs()
   if (!Number.isFinite(t0)) return []
@@ -371,6 +406,21 @@ export function orbitTrail(nowMs) {
   const endMs = Math.min(nowMs, t0 + landing * 1000)
   const start = Math.max(t0 + from * 1000, endMs - TRAIL_MAX_S * 1000)
   const out = []
+  // Begin at the pad when the whole flight is shown.
+  if (start === t0 + from * 1000) {
+    try {
+      const pad = getMeta().launchPad
+      out.push({
+        gps_time: t0 / 1000 - GPS_TO_UNIX_OFFSET,
+        mission_time: 0,
+        latitude: pad.lat,
+        longitude: pad.lon,
+        altitude: 0,
+      })
+    } catch {
+      /* no pad yet */
+    }
+  }
   for (let ms = start; ms <= endMs; ms += TRAIL_STEP_S * 1000) {
     const fix = orbitFixAt(ms)
     if (fix) out.push(fix)
