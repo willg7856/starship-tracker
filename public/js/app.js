@@ -1268,7 +1268,7 @@ async function main() {
       mapApi = ensureMap(mapApi, !meta.hasFlightPath)
       mapApi.update({
         ship: null,
-        liveTrail: state.liveTrail,
+        liveTrail: state.mapTrail || state.liveTrail,
         plannedPath: state.plannedPath,
         booster: state.booster,
         starlink: state.starlink,
@@ -1279,7 +1279,7 @@ async function main() {
     mapApi = ensureMap(mapApi, false)
     mapApi.update({
       ship: state.ship,
-      liveTrail: state.liveTrail,
+      liveTrail: state.mapTrail || state.liveTrail,
       plannedPath: state.plannedPath,
       booster: state.booster,
       starlink: state.starlink,

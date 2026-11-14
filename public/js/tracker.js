@@ -1,5 +1,13 @@
 import { flightStorageKey, shipKey } from './flight.js'
-import { orbitFixAt, orbitTrail, orbitWindow, plannedReentryPath, refreshOrbit, starlinkFixAt } from './orbit.js'
+import {
+  orbitFixAt,
+  orbitTrail,
+  orbitWindow,
+  plannedReentryPath,
+  reconstructedPath,
+  refreshOrbit,
+  starlinkFixAt,
+} from './orbit.js'
 import { getMeta } from './path.js'
 import {
   appendLiveFix,
@@ -11,7 +19,7 @@ import {
   restElapsedSeconds,
   saveLiveTrail,
 } from './trail.js'
-import { MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } from './utils.js'
+import { GPS_TO_UNIX_OFFSET, MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } from './utils.js'
 
 const POLL_MS = 1_000
 // The Space Notices trail only changes when there is real flight data.
@@ -149,6 +157,7 @@ export function startTracker(onChange) {
 
   const emit = () => {
     state.plannedPath = plannedPathNow()
+    state.mapTrail = trailForMap()
     state.starlink = starlinkFixAt(Date.now())
     if (state.ship?.current) {
       if ((state.positionSource === 'spacex' || state.positionSource === 'orbit') && state.fetchedAt) {
@@ -165,6 +174,25 @@ export function startTracker(onChange) {
       state.lastMovedAt = null
     }
     onChange({ ...state })
+  }
+
+  /**
+   * The flown path for the map. Live SpaceX fixes only exist from when this
+   * browser opened the page, so the part before that is rebuilt (pad at
+   * liftoff, then the published orbit) and joined to the live fixes.
+   */
+  let backfill = { key: null, points: [] }
+  function trailForMap() {
+    const trail = state.liveTrail || []
+    if (state.positionSource !== 'spacex' || !state.ship?.current) return trail
+    const first = trail[0] ?? state.ship.current
+    const firstMs = (first.gps_time + GPS_TO_UNIX_OFFSET - 18) * 1000
+    const key = `${orbitVersion}/${Math.round(first.gps_time)}`
+    if (backfill.key !== key) {
+      // Stop a little before the first live fix so the two join cleanly.
+      backfill = { key, points: reconstructedPath(firstMs - 20_000) }
+    }
+    return backfill.points.length ? backfill.points.concat(trail) : trail
   }
 
   const controller = new AbortController()
@@ -243,6 +271,7 @@ export function startTracker(onChange) {
    * estimate so the page says plainly that there is no live position.
    */
   let orbitTrailSeeded = false
+  let orbitVersion = 0
   function applyOrbitFix() {
     const now = Date.now()
     const fix = orbitFixAt(now)
@@ -320,7 +349,10 @@ export function startTracker(onChange) {
   const syncOrbit = () =>
     refreshOrbit()
       .then((changed) => {
-        if (changed) orbitTrailSeeded = false
+        if (changed) {
+          orbitTrailSeeded = false
+          orbitVersion += 1
+        }
       })
       .catch(() => {})
   void syncOrbit()
