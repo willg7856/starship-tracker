@@ -5,12 +5,18 @@
  * the ship deployed); without one, a planned orbit is modelled from the launch
  * site, SpaceX's T-0 and its flight timeline. SGP4 turns either into a fix
  * shaped like SpaceX's tracker data, so the map and readouts work
- * unchanged. Fixes are only produced between engine cutoff and the deorbit
- * burn, when the ship really is on that orbit.
+ * unchanged.
+ *
+ * Phases (mission time from SpaceX's flight timeline):
+ *  - orbit:   engine cutoff to entry interface, from the orbit above
+ *  - reentry: entry to the catch, along the planned re-entry path into
+ *             Starbase (great circle from the far end of the official
+ *             re-entry hazard area to the pad)
+ *  - landed:  after the planned catch time, at the pad
  */
 import * as sat from './vendor/satellite.es.js'
 import { flight } from './flight.js'
-import { getMeta } from './path.js'
+import { getMeta, getNoticePolygons } from './path.js'
 import { GPS_TO_UNIX_OFFSET } from './utils.js'
 
 const EARTH_MU = 398600.4418 // km^3/s^2
@@ -28,12 +34,116 @@ function timelineSeconds(pattern, fallback) {
   return Number.isFinite(e?.t) ? e.t : fallback
 }
 
-/** Mission-time window when the ship is on orbit: engine cutoff to deorbit. */
+/**
+ * Mission-time milestones: engine cutoff (on orbit from here), deorbit burn,
+ * entry interface (orbit estimate ends), and landing.
+ */
 export function orbitWindow() {
   const landing = Number.isFinite(flight.landingMissionTime) ? flight.landingMissionTime : 22 * 3600
+  const deorbit = timelineSeconds(/deorbit burn start/i, landing - 3600)
+  const entry = timelineSeconds(/starship entry|entry interface/i, landing - 1300)
   return {
     from: timelineSeconds(/starship engine cutoff|\bSECO\b/i, 9 * 60),
-    to: timelineSeconds(/deorbit burn start/i, landing - 3600),
+    deorbit,
+    to: Math.max(deorbit, entry),
+    landing,
+  }
+}
+
+const ENTRY_ALT_M = 120_000
+
+function toVec(lat, lon) {
+  const φ = (lat * Math.PI) / 180
+  const λ = (lon * Math.PI) / 180
+  return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)]
+}
+
+function fromVec([x, y, z]) {
+  return [(Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI, (Math.atan2(y, x) * 180) / Math.PI]
+}
+
+/** Point a fraction f along the great circle a -> b (both [lat, lon]). */
+function slerp(a, b, f) {
+  const va = toVec(a[0], a[1])
+  const vb = toVec(b[0], b[1])
+  const dot = Math.min(1, Math.max(-1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]))
+  const ω = Math.acos(dot)
+  if (ω < 1e-9) return a
+  const ka = Math.sin((1 - f) * ω) / Math.sin(ω)
+  const kb = Math.sin(f * ω) / Math.sin(ω)
+  return fromVec([ka * va[0] + kb * vb[0], ka * va[1] + kb * vb[1], ka * va[2] + kb * vb[2]])
+}
+
+function greatCircleKm(a, b) {
+  const va = toVec(a[0], a[1])
+  const vb = toVec(b[0], b[1])
+  const dot = Math.min(1, Math.max(-1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]))
+  return Math.acos(dot) * EARTH_R
+}
+
+/**
+ * The planned re-entry into the launch site for a tower catch: from the
+ * point of the official re-entry hazard area farthest from the pad, along a
+ * great circle to the pad. Null without hazard data or for a splashdown.
+ */
+export function plannedReentry() {
+  if (flight.landingKind !== 'catch') return null
+  let pad
+  try {
+    pad = getMeta().launchPad
+  } catch {
+    return null
+  }
+  const group = (getNoticePolygons() || []).find((n) => n.id === 'hazard-reentry')
+  if (!group) return null
+  const padLL = [pad.lat, pad.lon]
+  let start = null
+  let best = 0
+  for (const ring of group.polygons || []) {
+    for (const p of ring) {
+      const lon = ((((p[1] + 180) % 360) + 360) % 360) - 180
+      const d = greatCircleKm([p[0], lon], padLL)
+      if (d > best && d < 6000) {
+        best = d
+        start = [p[0], lon]
+      }
+    }
+  }
+  if (!start || best < 300) return null
+  return { start, end: padLL, km: best }
+}
+
+/** Points along the planned re-entry path, for drawing it. */
+export function plannedReentryPath(samples = 64) {
+  const path = plannedReentry()
+  if (!path) return null
+  const out = []
+  for (let i = 0; i <= samples; i++) out.push(slerp(path.start, path.end, i / samples))
+  return out
+}
+
+/**
+ * Entry to catch: most ground is covered early at near-orbital speed, then
+ * the ship slows and drops to the tower. s(τ) = 1 - (1 - τ)^K.
+ */
+const REENTRY_K = 2.3
+function reentryFixAt(ms, met, w) {
+  const path = plannedReentry()
+  if (!path) return null
+  const span = w.landing - w.to
+  if (!(span > 0)) return null
+  const τ = Math.min(1, Math.max(0, (met - w.to) / span))
+  const along = 1 - (1 - τ) ** REENTRY_K
+  const [lat, lon] = slerp(path.start, path.end, along)
+  const speed = (REENTRY_K * (1 - τ) ** (REENTRY_K - 1) * path.km * 1000) / span
+  return {
+    gps_time: ms / 1000 - GPS_TO_UNIX_OFFSET,
+    mission_time: met,
+    latitude: lat,
+    longitude: lon,
+    altitude: ENTRY_ALT_M * (1 - τ) ** 1.6,
+    speed,
+    estimated: 'reentry',
   }
 }
 
@@ -139,18 +249,70 @@ function modelOrbit() {
   }
 }
 
-export function orbitSource() {
-  return orbit ? { source: orbit.source, label: orbit.label } : null
+/** The estimate's current phase. */
+export function estimatePhase(ms = Date.now()) {
+  const t0 = liftoffMs()
+  if (!Number.isFinite(t0)) return null
+  const met = (ms - t0) / 1000
+  const w = orbitWindow()
+  if (met < w.from) return null
+  if (met <= w.to) return 'orbit'
+  if (met < w.landing) return plannedReentry() ? 'reentry' : null
+  return flight.landingKind === 'catch' ? 'landed' : null
+}
+
+/** Where the current estimate comes from, for the page to say plainly. */
+export function orbitSource(ms = Date.now()) {
+  const phase = estimatePhase(ms)
+  if (phase === 'reentry') {
+    return {
+      source: 'reentry',
+      phase,
+      label:
+        "along the planned re-entry path into Starbase, from SpaceX's timeline and the official re-entry hazard area",
+    }
+  }
+  if (phase === 'landed') {
+    const w = orbitWindow()
+    const h = Math.floor(w.landing / 3600)
+    const m = String(Math.floor((w.landing % 3600) / 60)).padStart(2, '0')
+    const sec = String(Math.floor(w.landing % 60)).padStart(2, '0')
+    return {
+      source: 'plan',
+      phase,
+      label: `at Starbase, caught at SpaceX's planned catch time (T+${h}:${m}:${sec}); not confirmed by live data`,
+    }
+  }
+  return orbit ? { source: orbit.source, phase: 'orbit', label: orbit.label } : null
 }
 
 /** A tracker-style fix at `ms`, or null outside the on-orbit window. */
 export function orbitFixAt(ms) {
-  if (!orbit) return null
   const t0 = liftoffMs()
   if (!Number.isFinite(t0)) return null
   const met = (ms - t0) / 1000
-  const { from, to } = orbitWindow()
-  if (met < from || met > to) return null
+  const w = orbitWindow()
+  if (met < w.from) return null
+  if (met > w.to) {
+    if (met < w.landing) return reentryFixAt(ms, met, w)
+    if (flight.landingKind !== 'catch') return null
+    let pad
+    try {
+      pad = getMeta().launchPad
+    } catch {
+      return null
+    }
+    return {
+      gps_time: ms / 1000 - GPS_TO_UNIX_OFFSET,
+      mission_time: w.landing,
+      latitude: pad.lat,
+      longitude: pad.lon,
+      altitude: 0,
+      speed: 0,
+      estimated: 'plan',
+    }
+  }
+  if (!orbit) return null
   const date = new Date(ms)
   const pv = sat.propagate(orbit.satrec, date)
   if (!pv?.position || !pv?.velocity || typeof pv.position === 'boolean') return null
@@ -172,14 +334,15 @@ export function orbitFixAt(ms) {
   }
 }
 
-/** Ground track flown so far on orbit (last few hours), oldest first. */
+/** Ground track flown so far (last few hours, up to the catch), oldest first. */
 export function orbitTrail(nowMs) {
   const t0 = liftoffMs()
-  if (!orbit || !Number.isFinite(t0)) return []
-  const { from } = orbitWindow()
-  const start = Math.max(t0 + from * 1000, nowMs - TRAIL_MAX_S * 1000)
+  if (!Number.isFinite(t0)) return []
+  const { from, landing } = orbitWindow()
+  const endMs = Math.min(nowMs, t0 + landing * 1000)
+  const start = Math.max(t0 + from * 1000, endMs - TRAIL_MAX_S * 1000)
   const out = []
-  for (let ms = start; ms <= nowMs; ms += TRAIL_STEP_S * 1000) {
+  for (let ms = start; ms <= endMs; ms += TRAIL_STEP_S * 1000) {
     const fix = orbitFixAt(ms)
     if (fix) out.push(fix)
   }

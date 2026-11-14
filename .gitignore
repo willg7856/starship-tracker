@@ -26,3 +26,7 @@ worker-configuration.d.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.pyc

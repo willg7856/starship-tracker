@@ -1,5 +1,5 @@
 import { flightStorageKey, shipKey } from './flight.js'
-import { orbitFixAt, orbitTrail, refreshOrbit } from './orbit.js'
+import { orbitFixAt, orbitTrail, orbitWindow, plannedReentryPath, refreshOrbit } from './orbit.js'
 import { getMeta } from './path.js'
 import {
   appendLiveFix,
@@ -14,8 +14,8 @@ import {
 import { MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } from './utils.js'
 
 const POLL_MS = 1_000
-const SPACE_NOTICES_POLL_MS = 60_000
-const SHIP_TRAIL_POLL_MS = 30_000
+// The Space Notices trail only changes when there is real flight data.
+const SHIP_TRAIL_POLL_MS = 120_000
 const SHIP_KEY = shipKey
 const LAST_FIX_KEY = flightStorageKey('last-fix-v1')
 
@@ -97,65 +97,41 @@ export async function fetchShipTracker(signal) {
   if (!res.ok) throw new Error(`SpaceX tracker returned ${res.status}`)
   const raw = await res.json()
   const ship = pickShip(raw)
-  if (!ship?.current) return null
-  return { ship, fetchedAt: new Date() }
+  return { ship: ship?.current ? ship : null, booster: pickBooster(raw), fetchedAt: new Date() }
 }
 
-export async function fetchSpaceNoticesShip(signal) {
-  const res = await fetch(`/api/space-notices-ship?t=${Date.now()}`, {
-    signal,
-    cache: 'no-store',
-  })
-  if (!res.ok) throw new Error(`Space Notices returned ${res.status}`)
-  const raw = await res.json()
-  if (!Array.isArray(raw)) throw new Error('Space Notices feed was not an array')
-  return raw
-    .filter(
-      (p) =>
-        p &&
-        typeof p.id === 'number' &&
-        typeof p.latitude === 'number' &&
-        typeof p.longitude === 'number',
-    )
-    .sort((a, b) => a.id - b.id)
-}
-
-function pointsAfterId(points, afterId) {
-  return points.filter((p) => p.id > afterId)
-}
-
-function missionClockNow(nowMs = Date.now()) {
-  const { splashdownGpsTime, splashdownMissionTime } = getMeta()
-  if (
-    typeof splashdownGpsTime !== 'number' ||
-    typeof splashdownMissionTime !== 'number'
-  ) {
+/** The planned re-entry path, shown from 30 min before the deorbit burn. */
+function plannedPathNow() {
+  try {
+    const m = getMeta()
+    const t0 = m.actualLiftoffMs ?? m.plannedLiftoffMs
+    if (!Number.isFinite(t0)) return null
+    const met = (Date.now() - t0) / 1000
+    return met >= orbitWindow().deorbit - 1800 ? plannedReentryPath() : null
+  } catch {
     return null
-  }
-  const splashMs = gpsTimeToDate(splashdownGpsTime).getTime()
-  const elapsed = Math.max(0, (nowMs - splashMs) / 1000)
-  return {
-    missionTime: splashdownMissionTime + elapsed,
-    gpsTime: splashdownGpsTime + elapsed,
-  }
-}
-
-function shipTrackFromSpaceNoticesTip(tip, opts) {
-  return {
-    current: {
-      gps_time: opts.gpsTime,
-      mission_time: opts.missionTime,
-      altitude: -20,
-      speed: 0,
-      latitude: tip.latitude,
-      longitude: tip.longitude,
-    },
-    trajectory: [],
   }
 }
 
 /**
- * Poll SpaceX + Space Notices. Calls onChange(state) whenever something updates.
+ * SpaceX keys a booster as e.g. `booster22`. Returns the one live booster,
+ * if SpaceX publishes exactly one.
+ */
+function pickBooster(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const boosters = Object.entries(raw).filter(
+    ([key, value]) => /^booster\d+$/i.test(key) && value?.current,
+  )
+  if (boosters.length !== 1) return null
+  const [key, value] = boosters[0]
+  const c = value.current
+  if (![c.latitude, c.longitude].every(Number.isFinite)) return null
+  return { label: `Booster ${key.replace(/\D+/g, '')}`, current: c }
+}
+
+/**
+ * Poll SpaceX (and the Space Notices flight trail). Calls onChange(state)
+ * whenever something updates.
  */
 export function startTracker(onChange) {
   const state = {
@@ -172,6 +148,7 @@ export function startTracker(onChange) {
   }
 
   const emit = () => {
+    state.plannedPath = plannedPathNow()
     if (state.ship?.current) {
       if ((state.positionSource === 'spacex' || state.positionSource === 'orbit') && state.fetchedAt) {
         // Prefer telemetry freshness while SpaceX is publishing live fixes.
@@ -259,24 +236,6 @@ export function startTracker(onChange) {
     }
   }
 
-  async function loadFromSpaceNotices() {
-    const points = await fetchSpaceNoticesShip(controller.signal)
-    const { bakedLatestId } = getMeta()
-    const extension = pointsAfterId(points, bakedLatestId)
-    state.spaceNoticesExtension = extension
-    const tip = extension[extension.length - 1] ?? points[points.length - 1]
-    if (!tip) return false
-    const clock = missionClockNow()
-    if (!clock) return false
-    state.ship = shipTrackFromSpaceNoticesTip(tip, clock)
-    state.fetchedAt = new Date()
-    state.positionSource = 'space-notices'
-    positionSource = 'space-notices'
-    state.error = null
-    hasLoaded = true
-    return true
-  }
-
   /**
    * No SpaceX telemetry: use the estimated position from the published (or
    * modelled) orbit while the ship is on orbit. Outside that window, drop the
@@ -295,6 +254,9 @@ export function startTracker(onChange) {
       return false
     }
     state.ship = { current: fix, trajectory: [] }
+    // After SpaceX's planned catch time the estimate sits at the pad; that
+    // planned time is what stops the clock (no live data to confirm it).
+    if (fix.estimated === 'plan') state.landedElapsedSeconds = fix.mission_time
     state.fetchedAt = new Date(now)
     state.positionSource = 'orbit'
     positionSource = 'orbit'
@@ -311,7 +273,9 @@ export function startTracker(onChange) {
 
   async function load() {
     try {
-      const live = await fetchShipTracker(controller.signal)
+      const feed = await fetchShipTracker(controller.signal)
+      state.booster = feed.booster
+      const live = feed.ship ? feed : null
       if (live) {
         state.ship = {
           ...live.ship,
@@ -334,53 +298,19 @@ export function startTracker(onChange) {
         applySharedTrail()
         return
       }
-      // SpaceX answered but has no ship. On orbit, estimate from the orbit.
-      if (applyOrbitFix()) return
-      // Space Notices is only a backup; if it fails, that is not an outage.
-      let ok = false
-      try {
-        ok = await loadFromSpaceNotices()
-      } catch {
-        ok = false
-      }
-      if (!ok && !hasLoaded) {
-        state.error = null
-        // Pre-launch: no ship telemetry yet is expected.
-      }
+      // SpaceX answered but has no ship (normal before launch, or with
+      // its tracker switched off): estimate from the orbit / flight plan.
+      applyOrbitFix()
+      if (!hasLoaded) state.error = null
     } catch (err) {
       if (controller.signal.aborted) return
       if (positionSource !== 'spacex' && applyOrbitFix()) return
-      try {
-        if (await loadFromSpaceNotices()) return
-      } catch {
-        /* keep original error */
-      }
       if (!hasLoaded) {
         state.error = err instanceof Error ? err.message : 'Failed to load tracker'
       }
     } finally {
       state.loading = false
       emit()
-    }
-  }
-
-  async function loadSpaceNotices() {
-    try {
-      const points = await fetchSpaceNoticesShip(controller.signal)
-      const { bakedLatestId } = getMeta()
-      const extension = pointsAfterId(points, bakedLatestId)
-      state.spaceNoticesExtension = extension
-      if (positionSource === 'space-notices') {
-        const tip = extension[extension.length - 1] ?? points[points.length - 1]
-        const clock = missionClockNow()
-        if (tip && clock) {
-          state.ship = shipTrackFromSpaceNoticesTip(tip, clock)
-          state.fetchedAt = new Date()
-        }
-      }
-      emit()
-    } catch {
-      /* supplemental */
     }
   }
 
@@ -395,17 +325,14 @@ export function startTracker(onChange) {
   void syncOrbit()
   const orbitId = setInterval(syncOrbit, 10 * 60_000)
   void load()
-  void loadSpaceNotices()
   void loadSharedTrail()
   const pollId = setInterval(() => void load(), POLL_MS)
-  const snId = setInterval(() => void loadSpaceNotices(), SPACE_NOTICES_POLL_MS)
   const trailId = setInterval(() => void loadSharedTrail(), SHIP_TRAIL_POLL_MS)
 
   return () => {
     clearInterval(orbitId)
     controller.abort()
     clearInterval(pollId)
-    clearInterval(snId)
     clearInterval(trailId)
   }
 }
