@@ -2274,3 +2274,22 @@ html.monitoring .topbar-inner {
     letter-spacing: 0.02em;
   }
 }
+
+/* Static intro (read by search engines), shown only until the tracker loads. */
+.static-intro {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 4rem 1.25rem;
+  font-family: var(--font-body);
+  color: var(--muted);
+}
+
+.static-intro h1 {
+  color: var(--ink);
+  font-size: 1.6rem;
+  margin: 0 0 1rem;
+}
+
+.static-intro a {
+  color: var(--ignition);
+}
