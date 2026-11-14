@@ -184,7 +184,12 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   function addPolylineCopies(points, style, bucket) {
     if (!points || points.length < 2) return
-    const unwrapped = unwrapRing(points)
+    let unwrapped = unwrapRing(points)
+    // A multi-orbit ground track unwraps through many worlds; anchor it so the
+    // newest point (where the ship marker is) sits in the primary world.
+    const lastLon = unwrapped[unwrapped.length - 1][1]
+    const anchor = Math.round(lastLon / 360) * 360
+    if (anchor !== 0) unwrapped = shiftLatLngs(unwrapped, -anchor)
     for (const offset of activeWraps) {
       bucket.push(
         L.polyline(shiftLatLngs(unwrapped, offset), {
@@ -527,7 +532,9 @@ export function createMap(container, { prelaunch = false } = {}) {
         latlng: live,
         radius: 9,
         halo: 18,
-        popup: `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}<br>Live from SpaceX`,
+        popup: `<strong>${shipLabel}</strong><br>${formatLatLon(live[0], live[1])}<br>${
+          current.estimated ? 'Estimated from published orbit' : 'Live from SpaceX'
+        }`,
       }
 
       // Keep wrap copies in sync with the viewport, then redraw live layers.

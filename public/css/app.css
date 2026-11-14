@@ -1447,3 +1447,37 @@ html[data-theme='dark'] {
   height: 0.6rem;
   background: #ff5a1f;
 }
+
+/* Estimated position (no SpaceX telemetry). */
+.estimate-note {
+  margin: 0.45rem 0 0;
+  max-width: 44rem;
+  padding: 0.45rem 0.65rem;
+  border-left: 3px solid var(--ignition);
+  background: color-mix(in srgb, var(--ignition) 8%, transparent);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.estimate-note[hidden] {
+  display: none;
+}
+
+.topbar .status-line[data-state='estimated'] {
+  color: #ff7a47;
+}
+
+/* Completed timeline milestones stay green. */
+.timeline-list li[data-state='done'],
+.timeline-list li[data-state='done'] .tl-time {
+  color: var(--signal);
+}
+
+.timeline-list li[data-state='done'] .tl-time::before {
+  content: '✓ ';
+}
+
+.timeline-list li[data-state='current'] .tl-time::before {
+  content: '✓ ';
+}

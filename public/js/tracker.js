@@ -1,4 +1,5 @@
 import { flightStorageKey, shipKey } from './flight.js'
+import { orbitFixAt, orbitTrail, refreshOrbit } from './orbit.js'
 import { getMeta } from './path.js'
 import {
   appendLiveFix,
@@ -172,7 +173,7 @@ export function startTracker(onChange) {
 
   const emit = () => {
     if (state.ship?.current) {
-      if (state.positionSource === 'spacex' && state.fetchedAt) {
+      if ((state.positionSource === 'spacex' || state.positionSource === 'orbit') && state.fetchedAt) {
         // Prefer telemetry freshness while SpaceX is publishing live fixes.
         state.lastMovedAt = state.fetchedAt
       } else {
@@ -276,6 +277,38 @@ export function startTracker(onChange) {
     return true
   }
 
+  /**
+   * No SpaceX telemetry: use the estimated position from the published (or
+   * modelled) orbit while the ship is on orbit. Outside that window, drop the
+   * estimate so the page says plainly that there is no live position.
+   */
+  let orbitTrailSeeded = false
+  function applyOrbitFix() {
+    const now = Date.now()
+    const fix = orbitFixAt(now)
+    if (!fix) {
+      if (state.positionSource === 'orbit') {
+        state.ship = null
+        state.positionSource = null
+        positionSource = null
+      }
+      return false
+    }
+    state.ship = { current: fix, trajectory: [] }
+    state.fetchedAt = new Date(now)
+    state.positionSource = 'orbit'
+    positionSource = 'orbit'
+    state.error = null
+    hasLoaded = true
+    if (!orbitTrailSeeded) {
+      state.liveTrail = orbitTrail(now)
+      orbitTrailSeeded = true
+    } else {
+      state.liveTrail = appendLiveFix(state.liveTrail, fix)
+    }
+    return true
+  }
+
   async function load() {
     try {
       const live = await fetchShipTracker(controller.signal)
@@ -285,6 +318,10 @@ export function startTracker(onChange) {
           current: withDerivedSpeed(live.ship.current),
         }
         state.fetchedAt = live.fetchedAt
+        if (positionSource === 'orbit') {
+          // Real telemetry is back: replace the estimated track.
+          state.liveTrail = loadLiveTrail()
+        }
         state.positionSource = 'spacex'
         positionSource = 'spacex'
         state.error = null
@@ -297,8 +334,9 @@ export function startTracker(onChange) {
         applySharedTrail()
         return
       }
-      // SpaceX answered but has no ship yet (normal before launch). Space
-      // Notices is only a backup; if it fails, that is not an outage.
+      // SpaceX answered but has no ship. On orbit, estimate from the orbit.
+      if (applyOrbitFix()) return
+      // Space Notices is only a backup; if it fails, that is not an outage.
       let ok = false
       try {
         ok = await loadFromSpaceNotices()
@@ -311,6 +349,7 @@ export function startTracker(onChange) {
       }
     } catch (err) {
       if (controller.signal.aborted) return
+      if (positionSource !== 'spacex' && applyOrbitFix()) return
       try {
         if (await loadFromSpaceNotices()) return
       } catch {
@@ -345,6 +384,16 @@ export function startTracker(onChange) {
     }
   }
 
+  // Published orbits update every few hours; re-check every 10 minutes and
+  // rebuild the estimated track when a better or newer one appears.
+  const syncOrbit = () =>
+    refreshOrbit()
+      .then((changed) => {
+        if (changed) orbitTrailSeeded = false
+      })
+      .catch(() => {})
+  void syncOrbit()
+  const orbitId = setInterval(syncOrbit, 10 * 60_000)
   void load()
   void loadSpaceNotices()
   void loadSharedTrail()
@@ -353,6 +402,7 @@ export function startTracker(onChange) {
   const trailId = setInterval(() => void loadSharedTrail(), SHIP_TRAIL_POLL_MS)
 
   return () => {
+    clearInterval(orbitId)
     controller.abort()
     clearInterval(pollId)
     clearInterval(snId)
