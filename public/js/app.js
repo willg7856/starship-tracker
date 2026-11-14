@@ -275,6 +275,17 @@ function renderShell(root) {
         </div>
       </header>
 
+      <section class="section summary" aria-label="Flight summary" hidden>
+        <div class="section-inner">
+          <div class="summary-head">
+            <h2>${flightLabel ? `${escapeHtml(flightLabel)} summary` : 'Flight summary'}</h2>
+            <p class="summary-outcome"></p>
+          </div>
+          <dl class="summary-grid"></dl>
+          <p class="summary-note">From SpaceX's live tracker and the ship's published orbit, as recorded by this tracker. Distances and speeds are approximate.</p>
+        </div>
+      </section>
+
       <div class="stage">
       <section class="livestream" id="livestream" aria-label="Livestreams" hidden>
         <div class="livestream-inner">
@@ -1347,6 +1358,145 @@ function flightProgress(state, current) {
 /** GPS time has run 18 s ahead of UTC since 2017. */
 const GPS_LEAP_SECONDS = 18
 
+/**
+ * Flight summary, shown once the flight is over: outcome, duration and the
+ * extremes of the tracked path. Recomputed at most every 30 s.
+ */
+const STARBASE = { lat: 25.9967, lon: -97.1573 }
+let summaryAt = 0
+let summaryKey = ''
+
+function flightOutcome(state) {
+  const cur = state.ship?.current
+  let pad = STARBASE
+  try {
+    const p = getMeta().launchPad
+    if (Number.isFinite(p?.lat) && Number.isFinite(p?.lon)) pad = p
+  } catch {
+    /* default pad */
+  }
+  const shipName = flight.ship ? `Ship ${flight.ship}` : 'The ship'
+  if (cur && !cur.estimated && state.positionSource === 'spacex') {
+    const km = haversineKm(cur.latitude, cur.longitude, pad.lat, pad.lon)
+    if (km < 3 && Number.isFinite(cur.altitude)) {
+      // The catch arms hold the ship roughly 60-150 m up the tower.
+      if (cur.altitude > 30 && cur.altitude < 200) {
+        return `${shipName} was caught by the tower at Starbase. SpaceX's tracker shows it held about ${Math.round(cur.altitude)} m up the tower.`
+      }
+      if (cur.altitude <= 30) return `${shipName} is back at Starbase, according to SpaceX's tracker.`
+    }
+    return `${shipName}'s last tracked position: ${formatLatLon(cur.latitude, cur.longitude)}.`
+  }
+  const word = flight.landingKind === 'catch' ? 'catch' : flight.landingKind === 'splashdown' ? 'splashdown' : 'landing'
+  return `Flight complete at SpaceX's planned ${word} time. No live data confirms the outcome.`
+}
+
+/** Earth-fixed position (m) of a fix: SpaceX's own, else from lat/lon/alt (WGS84). */
+function fixEcef(p) {
+  if (Array.isArray(p.r_ecef) && p.r_ecef.length >= 3 && p.r_ecef.every(Number.isFinite)) return p.r_ecef
+  if (![p.latitude, p.longitude].every(Number.isFinite)) return null
+  const a = 6378137
+  const e2 = 6.69437999014e-3
+  const φ = (p.latitude * Math.PI) / 180
+  const λ = (p.longitude * Math.PI) / 180
+  const h = Number.isFinite(p.altitude) ? p.altitude : 0
+  const n = a / Math.sqrt(1 - e2 * Math.sin(φ) ** 2)
+  return [(n + h) * Math.cos(φ) * Math.cos(λ), (n + h) * Math.cos(φ) * Math.sin(λ), (n * (1 - e2) + h) * Math.sin(φ)]
+}
+
+function formatFlightTime(seconds) {
+  const s = Math.max(0, Math.round(seconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min ${String(s % 60).padStart(2, '0')} s`
+}
+
+function renderSummary(state, nowMs) {
+  const section = document.querySelector('.summary')
+  if (!section) return
+  const meta = getMeta()
+  const t0 = meta.actualLiftoffMs ?? meta.plannedLiftoffMs
+  const met = Number.isFinite(t0) ? (nowMs - t0) / 1000 : null
+  const landingS = Number.isFinite(state.landedElapsedSeconds)
+    ? state.landedElapsedSeconds
+    : landedElapsedSeconds ?? flight.landingMissionTime
+  const over =
+    landedElapsedSeconds != null ||
+    (Number.isFinite(met) && Number.isFinite(flight.landingMissionTime) && met > flight.landingMissionTime + 600)
+  if (!over) {
+    section.hidden = true
+    return
+  }
+  const key = `${state.ship?.current?.gps_time}|${state.positionSource}`
+  if (!section.hidden && nowMs - summaryAt < 30_000 && key === summaryKey) return
+  summaryAt = nowMs
+  summaryKey = key
+
+  const trail = (state.mapTrail || state.liveTrail || []).filter(
+    (p) => p && Number.isFinite(p.gps_time) && (Number.isFinite(p.altitude) || Array.isArray(p.r_ecef)),
+  )
+  let maxAlt = null
+  for (const p of trail) if (Number.isFinite(p.altitude) && (maxAlt == null || p.altitude > maxAlt)) maxAlt = p.altitude
+  // Top speed: a high percentile of fix-to-fix speeds, so one noisy pair
+  // can't set the record.
+  // Speed and distance in 3D at the ship's altitude (Earth-fixed, so
+  // relative to the ground).
+  const speeds = []
+  let distance = 0
+  let prev = null
+  for (const p of trail) {
+    const pos = fixEcef(p)
+    if (!pos) continue
+    if (prev) {
+      const d = Math.hypot(pos[0] - prev.pos[0], pos[1] - prev.pos[1], pos[2] - prev.pos[2])
+      const dt = p.gps_time - prev.t
+      if (dt > 0 && d / dt < 9000) {
+        distance += d / 1000
+        if (dt >= 1 && dt <= 180) speeds.push(d / dt)
+      }
+    }
+    prev = { pos, t: p.gps_time }
+  }
+  speeds.sort((a, b) => a - b)
+  const topSpeed = speeds.length >= 5 ? speeds[Math.floor(speeds.length * 0.98)] : null
+
+  const w = orbitWindow()
+  const insertion = (flight.timeline || []).find((e) => /insertion/i.test(e.label))?.t ?? w.from
+  const orbits = Math.round((w.deorbit - insertion) / orbitPeriodS())
+  const events = (flight.timeline || []).filter((e) => e.t >= 0)
+  const doneCount = Number.isFinite(landingS) ? events.filter((e) => e.t <= landingS + 1).length : events.length
+
+  const rows = []
+  if (Number.isFinite(t0)) {
+    const when = new Date(t0).toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })
+    rows.push(['Liftoff', when, meta.actualLiftoffMs ? 'seen live' : "SpaceX's T-0"])
+  }
+  if (Number.isFinite(landingS)) rows.push(['Flight time', formatFlightTime(landingS), `T+${formatClock(landingS)}`])
+  if (Number.isFinite(maxAlt) && maxAlt > 1000) rows.push(['Highest point', `${Math.round(maxAlt / 1000).toLocaleString()} km`, 'tracked'])
+  if (Number.isFinite(topSpeed)) rows.push(['Top speed', `${formatSpeedKmh(topSpeed)} km/h`, 'relative to the ground'])
+  if (distance > 100) rows.push(['Distance flown', `${Math.round(distance).toLocaleString()} km`, 'along the track'])
+  if (orbits > 0 && orbits < 100) rows.push(['Orbits', `~${orbits}`, `${(orbitPeriodS() / 60).toFixed(1)} min each`])
+  if (state.starlink?.name) rows.push(['Payload', state.starlink.name, 'deployed in orbit'])
+  if (events.length) rows.push(['Milestones', `${doneCount} of ${events.length}`, 'from SpaceX\'s timeline'])
+
+  section.querySelector('.summary-outcome').textContent = flightOutcome(state)
+  section.querySelector('.summary-grid').innerHTML = rows
+    .map(
+      ([label, value, sub]) =>
+        `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</dd></div>`,
+    )
+    .join('')
+  section.hidden = false
+}
+
+function formatClock(seconds) {
+  const s = Math.max(0, Math.round(seconds))
+  return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
 function renderCompare(state) {
   const box = document.querySelector('.compare')
   if (!box) return
@@ -1494,6 +1644,7 @@ async function main() {
     renderStatus(state, nowMs)
     renderTelemetry(state)
     renderCompare(state)
+    renderSummary(state, nowMs)
   }
 
   tick(latest)
