@@ -108,6 +108,37 @@ export async function fetchShipTracker(signal) {
   return { ship: ship?.current ? ship : null, booster: pickBooster(raw), fetchedAt: new Date() }
 }
 
+const STARLINK_TRAIL_S = 15 * 60
+
+/**
+ * Straight-line distance from the ship to the Starlink batch, compared at
+ * the moment of the ship's fix (SpaceX's gps_time is true GPS time, 18 s
+ * ahead of UTC); for an estimated ship, at the current time.
+ */
+function shipToStarlinkKm(ship) {
+  if (!ship) return null
+  const at = Number.isFinite(ship.gps_time) && !ship.estimated
+    ? (ship.gps_time + GPS_TO_UNIX_OFFSET - 18) * 1000
+    : Date.now()
+  const sat = starlinkFixAt(at)
+  if (!sat) return null
+  const a = ship.r_ecef
+  const b = sat.r_ecef
+  if (Array.isArray(a) && a.length >= 3 && a.every(Number.isFinite)) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) / 1000
+  }
+  if (![ship.latitude, ship.longitude, ship.altitude].every(Number.isFinite)) return null
+  // No Earth-fixed position on the fix: great-circle distance at the
+  // average altitude, combined with the altitude difference.
+  const R = 6371
+  const toR = (d) => (d * Math.PI) / 180
+  const dφ = toR(sat.latitude - ship.latitude)
+  const dλ = toR(sat.longitude - ship.longitude)
+  const h = Math.sin(dφ / 2) ** 2 + Math.cos(toR(ship.latitude)) * Math.cos(toR(sat.latitude)) * Math.sin(dλ / 2) ** 2
+  const ground = 2 * (R + (ship.altitude + sat.altitude) / 2000) * Math.asin(Math.sqrt(h))
+  return Math.hypot(ground, (ship.altitude - sat.altitude) / 1000)
+}
+
 /** The planned re-entry path, shown from 30 min before the deorbit burn. */
 function plannedPathNow() {
   try {
@@ -158,7 +189,18 @@ export function startTracker(onChange) {
   const emit = () => {
     state.plannedPath = plannedPathNow()
     state.mapTrail = trailForMap()
-    state.starlink = starlinkFixAt(Date.now())
+    const now = Date.now()
+    state.starlink = starlinkFixAt(now)
+    if (state.starlink) {
+      // Short trail behind the batch: the last 15 minutes, oldest first.
+      const trail = []
+      for (let s = STARLINK_TRAIL_S; s >= 0; s -= 30) {
+        const f = starlinkFixAt(now - s * 1000)
+        if (f) trail.push([f.latitude, f.longitude])
+      }
+      state.starlink.trail = trail
+      state.starlink.distanceKm = shipToStarlinkKm(state.ship?.current)
+    }
     if (state.ship?.current) {
       if ((state.positionSource === 'spacex' || state.positionSource === 'orbit') && state.fetchedAt) {
         // Prefer telemetry freshness while SpaceX is publishing live fixes.
