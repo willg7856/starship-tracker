@@ -280,6 +280,12 @@ function modelOrbit() {
   }
 }
 
+/** Orbital period (s) of the best known orbit; ~90 min for Starship. */
+export function orbitPeriodS() {
+  const no = orbit?.satrec?.no // rad/min
+  return Number.isFinite(no) && no > 0 ? (2 * Math.PI) / no * 60 : 89.9 * 60
+}
+
 /** The estimate's current phase. */
 export function estimatePhase(ms = Date.now()) {
   const t0 = liftoffMs()
