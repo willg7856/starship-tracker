@@ -188,6 +188,8 @@ function setTheme(theme) {
   } catch {
     /* ignore */
   }
+  const monitorThemeBtn = document.querySelector('.monitor-theme')
+  if (monitorThemeBtn) monitorThemeBtn.textContent = theme === 'dark' ? 'Light' : 'Dark'
   const btn = document.querySelector('.theme-toggle')
   if (btn) {
     btn.textContent = theme === 'dark' ? 'Light' : 'Dark'
@@ -231,7 +233,8 @@ function renderShell(root) {
                 ? `<a class="monitor-x" href="${flight.webcastUrl}" target="_blank" rel="noreferrer" hidden>SpaceX on X ↗</a>`
                 : ''
             }
-            <button type="button" class="monitor-exit" hidden>Exit</button>
+            <button type="button" class="monitor-theme" hidden aria-label="Switch theme">Dark</button>
+            <button type="button" class="monitor-exit" hidden title="Exit Fullscreen (Esc)">Exit</button>
           </div>
         </div>
       </header>
@@ -253,7 +256,7 @@ function renderShell(root) {
             <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
               Watch
             </button>
-            <button type="button" class="monitor-toggle" title="One-screen monitoring display: stream, map and flight timeline">Fullscreen</button>
+            <button type="button" class="monitor-toggle" title="One-screen monitoring display: stream, map and flight timeline (F)">Fullscreen</button>
             <button type="button" class="theme-toggle">Dark</button>
             ${
               flight.webcastUrl
@@ -486,11 +489,56 @@ function renderShell(root) {
       syncTopbar()
       window.dispatchEvent(new Event('resize'))
     })
+  // Keep the screen awake while monitoring (where the browser allows).
+  let wakeLock = null
+  const holdWakeLock = async () => {
+    try {
+      if (!appEl.classList.contains('monitor') || wakeLock || !navigator.wakeLock) return
+      wakeLock = await navigator.wakeLock.request('screen')
+      wakeLock.addEventListener?.('release', () => {
+        wakeLock = null
+      })
+    } catch {
+      wakeLock = null
+    }
+  }
+  const dropWakeLock = () => {
+    try {
+      wakeLock?.release?.()
+    } catch {
+      /* ignore */
+    }
+    wakeLock = null
+  }
+  // The browser drops the lock when the tab is hidden; take it back.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void holdWakeLock()
+  })
+
+  // Hide the mouse cursor after 3 s without movement while monitoring.
+  let idleTimer = null
+  const wakeCursor = () => {
+    appEl.classList.remove('monitor-idle')
+    clearTimeout(idleTimer)
+    if (appEl.classList.contains('monitor')) {
+      idleTimer = setTimeout(() => appEl.classList.add('monitor-idle'), 3000)
+    }
+  }
+  for (const ev of ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel']) {
+    document.addEventListener(ev, wakeCursor, { passive: true })
+  }
+
+  const monitorTheme = document.querySelector('.monitor-theme')
+  monitorTheme?.addEventListener('click', () => setTheme(getTheme() === 'dark' ? 'light' : 'dark'))
+
   const enterMonitor = async () => {
     if (appEl.classList.contains('monitor')) return
     appEl.classList.add('monitor')
     document.documentElement.classList.add('monitoring')
     monitorExit.hidden = false
+    if (monitorTheme) monitorTheme.hidden = false
+    void holdWakeLock()
+    wakeCursor()
     document.querySelector('.monitor-x')?.removeAttribute('hidden')
     if (livestream.hidden) setLivestreamOpen(true)
     window.scrollTo(0, 0)
@@ -505,9 +553,12 @@ function renderShell(root) {
   }
   const exitMonitor = () => {
     if (!appEl.classList.contains('monitor')) return
-    appEl.classList.remove('monitor')
+    appEl.classList.remove('monitor', 'monitor-idle')
     document.documentElement.classList.remove('monitoring')
     monitorExit.hidden = true
+    if (monitorTheme) monitorTheme.hidden = true
+    clearTimeout(idleTimer)
+    dropWakeLock()
     document.querySelector('.monitor-x')?.setAttribute('hidden', '')
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
     relayout()
@@ -519,7 +570,17 @@ function renderShell(root) {
     else relayout()
   })
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') exitMonitor()
+    if (e.key === 'Escape') {
+      exitMonitor()
+      return
+    }
+    // F toggles Fullscreen (not while typing, or with modifier keys).
+    const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]')
+    if ((e.key === 'f' || e.key === 'F') && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault()
+      if (appEl.classList.contains('monitor')) exitMonitor()
+      else void enterMonitor()
+    }
   })
   const rememberDismissed = () => {
     try {
