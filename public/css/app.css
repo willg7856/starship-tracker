@@ -1796,3 +1796,26 @@ html.monitoring body {
 .monitor-x[hidden] {
   display: none;
 }
+
+/* Masthead: heading on the left; the estimate notice, the next milestone
+ * and the buttons stacked in a column beside it. */
+.masthead-inner {
+  align-items: center;
+}
+
+.masthead-side {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  max-width: 35.5rem;
+  min-width: 0;
+}
+
+.masthead-side .estimate-note,
+.masthead-side .next-event {
+  margin: 0;
+}
+
+.masthead-side .masthead-actions {
+  justify-content: flex-start;
+}

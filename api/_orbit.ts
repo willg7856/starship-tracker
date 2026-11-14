@@ -82,7 +82,11 @@ export async function discoverOrbit(
   let value: OrbitInfo | null = null
 
   const name = `STARSHIP-${flight}`
-  const catalogued = await getJson<Omm[]>(`${GP}?NAME=${encodeURIComponent(name)}&FORMAT=json`)
+  // Both lookups at once: a cold start otherwise waits on them in turn.
+  const [catalogued, supIndex] = await Promise.all([
+    getJson<Omm[]>(`${GP}?NAME=${encodeURIComponent(name)}&FORMAT=json`),
+    getText(SUP_INDEX),
+  ])
   const shipOmm = newest(
     (Array.isArray(catalogued) ? catalogued : []).filter(
       (o) => String(o.OBJECT_NAME).toUpperCase() === name && belongsToFlight(o, liftoffMs),
@@ -97,16 +101,18 @@ export async function discoverOrbit(
   }
 
   if (!value) {
-    let files: string[] = []
-    const html = await getText(SUP_INDEX)
-    if (html) {
-      files = [...new Set([...html.matchAll(/sup-gp\.php\?FILE=(starlink-g[\w-]+)/gi)].map((m) => m[1]))]
-    }
+    const files = supIndex
+      ? [...new Set([...supIndex.matchAll(/sup-gp\.php\?FILE=(starlink-g[\w-]+)/gi)].map((m) => m[1]))]
+      : []
+    const lists = await Promise.all(
+      files
+        .slice(0, 8)
+        .map((file) => getJson<Omm[]>(`${SUP}?FILE=${encodeURIComponent(file)}&FORMAT=json`)),
+    )
     const found: Omm[] = []
-    for (const file of files.slice(0, 8)) {
-      const list = await getJson<Omm[]>(`${SUP}?FILE=${encodeURIComponent(file)}&FORMAT=json`)
+    for (const list of lists) {
       for (const o of Array.isArray(list) ? list : []) {
-        if (belongsToFlight(o, liftoffMs)) found.push({ ...o, _FILE: file })
+        if (belongsToFlight(o, liftoffMs)) found.push(o)
       }
     }
     const payloadOmm = newest(found)
