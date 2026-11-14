@@ -1482,56 +1482,14 @@ html[data-theme='dark'] {
   content: '✓ ';
 }
 
-/* ------------------------------------------------------------------
- * Split view: stream on the left half, map on the right half, filling
- * the screen under the fixed top bar. Wide screens only.
- * ------------------------------------------------------------------ */
+/* Fullscreen layout on wide screens: stream on the left half, map on the
+ * right half. */
 .stage {
   display: contents;
 }
 
-.split-toggle {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.1rem;
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.split-toggle:hover {
-  border-color: var(--ink);
-}
-
-.split-toggle:focus-visible {
-  outline: 2px solid var(--ignition);
-  outline-offset: 2px;
-}
-
-.split-toggle.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-}
-
-@media (max-width: 899px) {
-  .split-toggle {
-    display: none;
-  }
-}
-
 @media (min-width: 900px) {
-  .app.split .stage {
+  .app.monitor .stage {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     height: calc(100vh - var(--topbar-h));
@@ -1539,7 +1497,7 @@ html[data-theme='dark'] {
     border-bottom: 1px solid var(--line);
   }
 
-  .app.split .livestream {
+  .app.monitor .livestream {
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1548,7 +1506,7 @@ html[data-theme='dark'] {
     overflow: auto;
   }
 
-  .app.split .livestream-inner {
+  .app.monitor .livestream-inner {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -1556,17 +1514,17 @@ html[data-theme='dark'] {
     width: 100%;
   }
 
-  .app.split .livestream-grid {
+  .app.monitor .livestream-grid {
     flex: 1;
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
   }
 
-  .app.split .livestream-slot[data-slot='1'] {
+  .app.monitor .livestream-slot[data-slot='1'] {
     display: none;
   }
 
-  .app.split .livestream-slot[data-slot='0'] {
+  .app.monitor .livestream-slot[data-slot='0'] {
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1574,11 +1532,11 @@ html[data-theme='dark'] {
   }
 
   /* Keep the video 16:9, centred in the half. */
-  .app.split .livestream-slot[data-slot='0'] {
+  .app.monitor .livestream-slot[data-slot='0'] {
     justify-content: center;
   }
 
-  .app.split .livestream-frame {
+  .app.monitor .livestream-frame {
     flex: none;
     width: 100%;
     aspect-ratio: 16 / 9;
@@ -1586,26 +1544,26 @@ html[data-theme='dark'] {
     margin: 0;
   }
 
-  .app.split .livestream-head p {
+  .app.monitor .livestream-head p {
     display: none;
   }
 
-  .app.split .livestream-form {
+  .app.monitor .livestream-form {
     order: 2;
     margin-top: 0.75rem;
   }
 
-  .app.split .map-section {
+  .app.monitor .map-section {
     min-height: 0;
     border-bottom: 0;
   }
 
-  .app.split .map-shell {
+  .app.monitor .map-shell {
     height: 100%;
   }
 
-  .app.split .track-map,
-  .app.split .map-skeleton {
+  .app.monitor .track-map,
+  .app.monitor .map-skeleton {
     height: 100%;
     min-height: 0;
   }
@@ -1817,4 +1775,24 @@ html.monitoring body {
   html.monitoring .monitor-exit {
     padding: 0.2rem 0.5rem;
   }
+}
+
+/* SpaceX's own broadcast (X, not embeddable), shown in the fullscreen bar. */
+.monitor-x {
+  align-self: center;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ff7a47;
+  white-space: nowrap;
+}
+
+.monitor-x:hover {
+  color: #ffffff;
+}
+
+.monitor-x[hidden] {
+  display: none;
 }
