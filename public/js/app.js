@@ -219,9 +219,10 @@ function renderShell(root) {
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
             </p>
-            <p class="estimate-note" hidden></p>
-            <p class="next-event" aria-live="off" hidden></p>
           </div>
+          <div class="masthead-side">
+          <p class="estimate-note" hidden></p>
+          <p class="next-event" aria-live="off" hidden></p>
           <div class="masthead-actions">
             <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
               Watch
@@ -236,6 +237,7 @@ function renderShell(root) {
             <a class="masthead-link" href="${SPACEX_VEHICLE_TRACKER}" target="_blank" rel="noreferrer">
               SpaceX tracker
             </a>
+          </div>
           </div>
         </div>
       </header>

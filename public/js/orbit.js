@@ -94,6 +94,12 @@ function modelOmm(t0Ms) {
 /** Fetch the best published orbit; fall back to the modelled one. Returns true if the source changed. */
 export async function refreshOrbit() {
   const before = orbit?.source + orbit?.epoch
+  // The published-orbit lookup can take several seconds on a cold server;
+  // show the modelled estimate meanwhile so the page is never blank.
+  if (!orbit) {
+    const model = modelOrbit()
+    if (model) orbit = model
+  }
   let next = null
   try {
     const res = await fetch('/api/orbit', { cache: 'no-cache' })
@@ -113,19 +119,24 @@ export async function refreshOrbit() {
   }
   // Keep real orbit data through a failed refresh rather than downgrade.
   if (!next && orbit && orbit.source !== 'model') return false
-  if (!next) {
-    const t0 = liftoffMs()
-    if (Number.isFinite(t0)) {
-      next = {
-        source: 'model',
-        label: 'modelled from the launch time and the planned orbit, until a published orbit is available',
-        epoch: String(t0),
-        satrec: sat.json2satrec(modelOmm(t0)),
-      }
-    }
-  }
+  if (!next) next = modelOrbit()
   if (next) orbit = next
   return (orbit?.source + orbit?.epoch) !== before
+}
+
+function modelOrbit() {
+  const t0 = liftoffMs()
+  if (!Number.isFinite(t0)) return null
+  try {
+    return {
+      source: 'model',
+      label: 'using a model of the planned orbit from the launch time, until a published orbit is available',
+      epoch: String(t0),
+      satrec: sat.json2satrec(modelOmm(t0)),
+    }
+  } catch {
+    return null
+  }
 }
 
 export function orbitSource() {
