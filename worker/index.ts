@@ -1,4 +1,5 @@
 import { SPACEX_TRACKER, discoverFlight } from '../api/_flight.js'
+import { discoverOrbit } from '../api/_orbit.js'
 
 type Env = { ASSETS: Fetcher }
 
@@ -142,6 +143,26 @@ export default {
 
     if (pathname === '/api/flight') {
       return flightInfo()
+    }
+
+    if (pathname === '/api/orbit') {
+      try {
+        const info = await discoverFlight()
+        const orbit = info ? await discoverOrbit(info.flight, info.ship, info.plannedLiftoff) : null
+        return Response.json(
+          { flight: info?.flight ?? null, orbit },
+          {
+            headers: {
+              'Cache-Control': orbit
+                ? 'public, max-age=300, s-maxage=900'
+                : 'public, max-age=60, s-maxage=60',
+            },
+          },
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upstream fetch failed'
+        return Response.json({ error: message }, { status: 502 })
+      }
     }
 
     if (pathname === '/api/ship-trail') {

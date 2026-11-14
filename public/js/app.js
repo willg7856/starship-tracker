@@ -11,6 +11,7 @@ import {
 import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
 import { startTracker } from './tracker.js'
 import { renderTimeline, setupTimeline } from './timeline.js'
+import { orbitSource, orbitWindow } from './orbit.js'
 import {
   GPS_TO_UNIX_OFFSET,
   MAX_MISSION_S,
@@ -202,6 +203,7 @@ function renderShell(root) {
             <p class="masthead-sub">
               Live location from SpaceX's public vehicle tracker.
             </p>
+            <p class="estimate-note" hidden></p>
             <p class="next-event" aria-live="off" hidden></p>
           </div>
           <div class="masthead-actions">
@@ -935,13 +937,20 @@ function renderTelemetry(state) {
   } catch {
     traveledKm = 0
   }
-  const traveled = onPad ? '0 m' : formatDownrange(traveledKm)
+  let traveled = onPad ? '0 m' : formatDownrange(traveledKm)
+  let traveledNote = 'total'
+  if (current.estimated && Number.isFinite(current.speed) && Number.isFinite(current.mission_time)) {
+    // Estimated fixes: distance flown on orbit since engine cutoff.
+    const onOrbitS = Math.max(0, current.mission_time - orbitWindow().from)
+    traveled = `≈ ${formatDownrange((current.speed * onOrbitS) / 1000)}`
+    traveledNote = 'on orbit'
+  }
 
   const grid = document.querySelector('.telemetry-grid')
   grid.innerHTML = `
     <div><dt>Coordinates</dt><dd>${formatLatLon(current.latitude, current.longitude)}</dd></div>
     <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
-    <div><dt>Traveled</dt><dd>${traveled} <span>total</span></dd></div>
+    <div><dt>Traveled</dt><dd>${traveled} <span>${traveledNote}</span></dd></div>
   `
   if (recordTelemetrySample(current) || !chartsPainted) {
     chartsPainted = true
@@ -954,9 +963,14 @@ function renderStatus(state, nowMs) {
   let label = 'Updated —'
   let dataState = 'loading'
   const updatedAt = state.fetchedAt || state.lastMovedAt
+  const estimate = state.positionSource === 'orbit' ? orbitSource() : null
+  renderEstimateNote(estimate)
   if (state.error) {
     label = 'Offline'
     dataState = 'error'
+  } else if (!state.loading && estimate && state.ship?.current) {
+    label = 'Estimated position'
+    dataState = 'estimated'
   } else if (!state.loading && updatedAt) {
     label = `Updated ${formatUpdateAge(
       Math.max(0, Math.floor((nowMs - updatedAt.getTime()) / 1000)),
@@ -970,6 +984,27 @@ function renderStatus(state, nowMs) {
   }
   el.textContent = label
   el.dataset.state = dataState
+}
+
+let lastEstimateLabel = null
+
+/** Say plainly where an estimated position comes from. */
+function renderEstimateNote(estimate) {
+  const el = document.querySelector('.estimate-note')
+  if (!el) return
+  const label = estimate?.label || ''
+  if (label === lastEstimateLabel) return
+  lastEstimateLabel = label
+  el.hidden = !label
+  el.textContent = label
+    ? `SpaceX isn't publishing live tracking for this flight. Position, altitude and speed are estimated ${label}.`
+    : ''
+  const sub = document.querySelector('.masthead-sub')
+  if (sub) {
+    sub.textContent = label
+      ? 'Estimated location from published orbit data.'
+      : "Live location from SpaceX's public vehicle tracker."
+  }
 }
 
 function ensureMap(mapApi, prelaunch) {
