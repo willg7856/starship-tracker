@@ -211,8 +211,9 @@ export default {
       return Response.json({ error: 'Not found' }, { status: 404 })
     }
 
-    // Keep Vercel Web Analytics working while the hostname is served by this Worker.
-    if (pathname.startsWith('/_vercel/insights/')) {
+    // Keep Vercel Web Analytics and Speed Insights working while the hostname
+    // is served by this Worker.
+    if (pathname.startsWith('/_vercel/insights/') || pathname.startsWith('/_vercel/speed-insights/')) {
       return proxyVercelInsights(request)
     }
 
