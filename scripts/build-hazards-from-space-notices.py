@@ -3,7 +3,7 @@ import importlib.util, json, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("m", "/home/user/starship-tracker/scripts/merge-flight14-hazard-polygons.py")
+spec = importlib.util.spec_from_file_location("m", Path(__file__).with_name("hazard_merge_lib.py"))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 
 notices = json.load(open(sys.argv[1]))

@@ -43,9 +43,21 @@ export type FlightInfo = {
   webcastUrl: string | null
   /** Embeddable player for the official webcast (as spacex.com embeds it). */
   webcastEmbedUrl: string | null
+  /** Deploy id; open pages reload when it changes. */
+  build: string | null
 }
 
 type Webcast = { videoId?: string; streamingVideoType?: string }
+
+/** Vercel's commit SHA for this deploy (null elsewhere, e.g. the Worker). */
+function deployId(): string | null {
+  try {
+    const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    return env?.VERCEL_GIT_COMMIT_SHA || env?.VERCEL_DEPLOYMENT_ID || null
+  } catch {
+    return null
+  }
+}
 
 /** The webcast SpaceX features: the only one, or the one marked featured. */
 function featuredWebcast(webcasts: Webcast[] | undefined): Webcast | null {
@@ -312,6 +324,7 @@ export async function discoverFlight(): Promise<FlightInfo | null> {
     timeline: timelineFrom(page?.preLaunchTimeline?.timelineEntries ?? [], timeline),
     webcastUrl: webcastUrl(page?.webcasts),
     webcastEmbedUrl: webcastEmbedUrl(page?.webcasts),
+    build: deployId(),
   }
   infoCache = { at: Date.now(), info }
   return info

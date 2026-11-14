@@ -38,17 +38,72 @@ function seedFromFlight() {
   }
 }
 
-/** Hazard zones for this flight, if a file was published for it. */
+/**
+ * Hazard zones for this flight: a curated file if one was published
+ * (/data/flight<N>-hazards.json), otherwise read automatically from the
+ * flight's Space Notices page (/api/hazards) and merged per group here.
+ */
 async function loadHazards() {
   if (!Number.isFinite(flight.flight)) return []
   try {
     const res = await fetch(`/data/flight${flight.flight}-hazards.json`, { cache: 'no-cache' })
+    if (res.ok && (res.headers.get('content-type') || '').includes('json')) {
+      const data = await res.json()
+      if (data?.flight === flight.flight && Array.isArray(data.noticePolygons)) {
+        return data.noticePolygons
+      }
+    }
+  } catch {
+    /* fall through to the automatic source */
+  }
+  try {
+    const res = await fetch('/api/hazards')
     if (!res.ok) return []
     const data = await res.json()
-    if (data?.flight !== flight.flight || !Array.isArray(data.noticePolygons)) return []
-    return data.noticePolygons
+    if (data?.flight !== flight.flight || !Array.isArray(data.groups)) return []
+    const { default: polygonClipping } = await import('./vendor/polygon-clipping.js')
+    return data.groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      type: 'MERGED',
+      polygons: mergeRings(polygonClipping, g.rings),
+    }))
   } catch {
     return []
+  }
+}
+
+/**
+ * Union overlapping rings ([lat, lon]) into clean outlines. Each ring is
+ * made continuous across the antimeridian and shifted so its centre is in
+ * [-180, 180] before merging. On any failure the rings are drawn as-is.
+ */
+function mergeRings(polygonClipping, rings) {
+  const polys = []
+  for (const ring of rings || []) {
+    if (!Array.isArray(ring) || ring.length < 3) continue
+    const pts = [[ring[0][1], ring[0][0]]]
+    for (let i = 1; i < ring.length; i++) {
+      let lon = ring[i][1]
+      const prev = pts[pts.length - 1][0]
+      while (lon - prev > 180) lon -= 360
+      while (lon - prev < -180) lon += 360
+      pts.push([lon, ring[i][0]])
+    }
+    const mid = pts.reduce((sum, p) => sum + p[0], 0) / pts.length
+    const shift = mid > 180 ? -360 : mid < -180 ? 360 : 0
+    const closed = pts.map(([lon, lat]) => [lon + shift, lat])
+    const [fx, fy] = closed[0]
+    const [lx, ly] = closed[closed.length - 1]
+    if (fx !== lx || fy !== ly) closed.push([fx, fy])
+    if (closed.length >= 4) polys.push([closed])
+  }
+  if (!polys.length) return []
+  try {
+    const merged = polygonClipping.union(...polys)
+    return merged.map((poly) => poly[0].map(([lon, lat]) => [lat, lon]))
+  } catch {
+    return polys.map((poly) => poly[0].map(([lon, lat]) => [lat, lon]))
   }
 }
 

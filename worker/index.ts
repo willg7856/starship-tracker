@@ -1,5 +1,6 @@
 import { SPACEX_TRACKER, discoverFlight } from '../api/_flight.js'
 import { discoverOrbit } from '../api/_orbit.js'
+import { discoverHazards } from '../api/_hazards.js'
 
 type Env = { ASSETS: Fetcher }
 
@@ -169,8 +170,24 @@ export default {
       return proxyDiscovered('trajectoryUrl', 'public, max-age=15, s-maxage=15', 'Ship trail')
     }
 
-    if (pathname === '/api/space-notices-ship') {
-      return proxyDiscovered('shipFeedUrl', 'public, max-age=30, s-maxage=30', 'Space Notices ship feed')
+    if (pathname === '/api/hazards') {
+      try {
+        const info = await discoverFlight()
+        const groups = info ? await discoverHazards(info.flight) : null
+        return Response.json(
+          { flight: info?.flight ?? null, groups },
+          {
+            headers: {
+              'Cache-Control': groups
+                ? 'public, max-age=600, s-maxage=1800'
+                : 'public, max-age=60, s-maxage=120',
+            },
+          },
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upstream fetch failed'
+        return Response.json({ error: message }, { status: 502 })
+      }
     }
 
     if (pathname.startsWith('/api/')) {

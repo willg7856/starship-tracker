@@ -106,6 +106,8 @@ export function createMap(container, { prelaunch = false } = {}) {
     reentry: [],
     hazards: [],
     live: [],
+    planned: [],
+    booster: [],
     ship: [],
     shipHalo: [],
     launch: [],
@@ -137,6 +139,10 @@ export function createMap(container, { prelaunch = false } = {}) {
           }
         : null,
     ship: null,
+    // Planned re-entry path into the launch site (dashed).
+    planned: null,
+    // Super Heavy, when SpaceX publishes its position.
+    booster: null,
   }
 
   const initialCenter = prelaunch
@@ -285,9 +291,37 @@ export function createMap(container, { prelaunch = false } = {}) {
     if (source.live) {
       addPolylineCopies(source.live, source.liveStyle, layers.live)
     }
+    clearLayerList(map, layers.planned)
+    if (source.planned) {
+      addPolylineCopies(
+        source.planned,
+        { color: '#ff5a1f', weight: 2, opacity: 0.8, dashArray: '6 6' },
+        layers.planned,
+      )
+    }
+  }
+
+  function rebuildBooster() {
+    clearLayerList(map, layers.booster)
+    if (!source.booster) return
+    for (const offset of activeWraps) {
+      layers.booster.push(
+        L.circleMarker(shiftLatLng(source.booster.latlng, offset), {
+          radius: 7,
+          color: '#12141a',
+          fillColor: '#f2f1ec',
+          fillOpacity: 0.95,
+          weight: 2,
+          renderer: vectorRenderer,
+        })
+          .bindPopup(source.booster.popup)
+          .addTo(map),
+      )
+    }
   }
 
   function rebuildShip() {
+    rebuildBooster()
     clearLayerList(map, layers.ship)
     clearLayerList(map, layers.shipHalo)
     if (!source.ship) return
@@ -478,8 +512,20 @@ export function createMap(container, { prelaunch = false } = {}) {
   })
 
   return {
-    update({ ship, liveTrail = [], spaceNoticesExtension = [] }) {
+    update({ ship, liveTrail = [], plannedPath = null, booster = null }) {
+      source.planned = plannedPath && plannedPath.length >= 2 ? plannedPath : null
+      source.booster = booster?.current
+        ? {
+            latlng: [booster.current.latitude, booster.current.longitude],
+            popup: `<strong>${booster.label}</strong><br>${formatLatLon(
+              booster.current.latitude,
+              booster.current.longitude,
+            )}<br>Live from SpaceX`,
+          }
+        : null
       if (!ship?.current) {
+        rebuildPaths()
+        rebuildShip()
         rebuildAllWraps(false)
         map.invalidateSize()
         return

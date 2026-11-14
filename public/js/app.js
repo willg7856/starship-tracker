@@ -61,8 +61,34 @@ function youtubeCoverage() {
 const AUTO_OPEN_FROM_S = -50 * 60
 const AUTO_OPEN_UNTIL_S = 2 * 3600
 const LIVESTREAM_DISMISSED_KEY = 'bsz-livestream-dismissed'
+const RESTORE_KEY = 'bsz-restore-view'
+let restoreView = () => {}
+let reloadScheduled = false
+
+/**
+ * Reload for a new deploy after a random 0-45 s, so open pages do not all
+ * reload at the same moment; keep Fullscreen / the open stream.
+ */
+function scheduleReload() {
+  if (reloadScheduled) return
+  reloadScheduled = true
+  setTimeout(() => {
+    try {
+      sessionStorage.setItem(
+        RESTORE_KEY,
+        JSON.stringify({
+          monitor: document.querySelector('.app')?.classList.contains('monitor') ?? false,
+          watch: !(document.querySelector('.livestream')?.hidden ?? true),
+        }),
+      )
+    } catch {
+      /* ignore */
+    }
+    window.location.reload()
+  }, Math.random() * 45_000)
+}
 let openLivestream = null
-let livestreamAutoOpened = false
+let livestreamWindow = 'launch'
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
 /**
  * Movement off the pad, not the planned clock. SpaceX mission_time already
@@ -422,6 +448,21 @@ function renderShell(root) {
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
   }
 
+  // After an automatic reload for a new deploy, put the viewer back where
+  // they were (browser fullscreen itself needs a click, so only the layout).
+  restoreView = () => {
+    let saved = null
+    try {
+      saved = JSON.parse(sessionStorage.getItem(RESTORE_KEY) || 'null')
+      sessionStorage.removeItem(RESTORE_KEY)
+    } catch {
+      saved = null
+    }
+    if (!saved) return
+    if (saved.watch && livestream.hidden) setLivestreamOpen(true)
+    if (saved.monitor) document.querySelector('.monitor-toggle')?.click()
+  }
+
   // Fullscreen monitoring display: stream + map side by side, flight
   // timeline along the bottom, no page scrolling.
   const monitorExit = document.querySelector('.monitor-exit')
@@ -467,7 +508,7 @@ function renderShell(root) {
   })
   const rememberDismissed = () => {
     try {
-      sessionStorage.setItem(LIVESTREAM_DISMISSED_KEY, '1')
+      sessionStorage.setItem(`${LIVESTREAM_DISMISSED_KEY}-${livestreamWindow}`, '1')
     } catch {
       /* ignore */
     }
@@ -850,6 +891,15 @@ function secondsSinceLanding(state, nowMs) {
     liftoffMs = null
   }
   const current = state?.ship?.current
+  // Estimated fixes pin mission time at the catch, so use SpaceX's T-0.
+  if (liftoffMs == null && current?.estimated) {
+    try {
+      const planned = getMeta().plannedLiftoffMs
+      if (typeof planned === 'number') liftoffMs = planned
+    } catch {
+      /* ignore */
+    }
+  }
   if (
     liftoffMs == null &&
     current &&
@@ -905,8 +955,14 @@ function renderMissionClock(state, nowMs) {
 }
 
 /** Pop the stream open once per visit while the webcast is on, unless closed. */
+/**
+ * Pop the stream open once per visit in each window, unless closed in that
+ * window: launch (T-50 min to T+2 h) and landing (30 min before the deorbit
+ * burn to 30 min after landing).
+ */
+const autoOpenedWindows = new Set()
 function maybeAutoOpenLivestream() {
-  if (livestreamAutoOpened || !openLivestream || clockStopped) return
+  if (!openLivestream) return
   if (!flight.webcastEmbedUrl && !SIMULCASTS[flight.flight]) return
   // Wall clock against SpaceX's T-0 (or the observed liftoff), not the
   // displayed clock, which sits at T-0 during a hold or a telemetry gap.
@@ -918,10 +974,17 @@ function maybeAutoOpenLivestream() {
   }
   if (!Number.isFinite(t0)) return
   const offset = (Date.now() - t0) / 1000
-  if (offset < AUTO_OPEN_FROM_S || offset > AUTO_OPEN_UNTIL_S) return
-  livestreamAutoOpened = true
+  const w = orbitWindow()
+  const windows = [
+    ['launch', AUTO_OPEN_FROM_S, AUTO_OPEN_UNTIL_S],
+    ['landing', w.deorbit - 30 * 60, w.landing + 30 * 60],
+  ]
+  const hit = windows.find(([, from, until]) => offset >= from && offset <= until)
+  if (!hit || autoOpenedWindows.has(hit[0])) return
+  autoOpenedWindows.add(hit[0])
+  livestreamWindow = hit[0]
   try {
-    if (sessionStorage.getItem(LIVESTREAM_DISMISSED_KEY)) return
+    if (sessionStorage.getItem(`${LIVESTREAM_DISMISSED_KEY}-${hit[0]}`)) return
   } catch {
     /* ignore */
   }
@@ -992,7 +1055,10 @@ function renderTelemetry(state) {
   }
   let traveled = onPad ? '0 m' : formatDownrange(traveledKm)
   let traveledNote = 'total'
-  if (current.estimated && Number.isFinite(current.speed) && Number.isFinite(current.mission_time)) {
+  if (current.estimated === 'reentry' || current.estimated === 'plan') {
+    traveled = '—'
+    traveledNote = 'estimate'
+  } else if (current.estimated && Number.isFinite(current.speed) && Number.isFinite(current.mission_time)) {
     // Estimated fixes: distance flown on orbit since engine cutoff.
     const onOrbitS = Math.max(0, current.mission_time - orbitWindow().from)
     traveled = `≈ ${formatDownrange((current.speed * onOrbitS) / 1000)}`
@@ -1018,7 +1084,12 @@ function renderStatus(state, nowMs) {
     label = 'Offline'
     dataState = 'error'
   } else if (!state.loading && estimate && state.ship?.current) {
-    label = 'Estimated position'
+    label =
+      estimate.phase === 'landed'
+        ? 'Caught (planned time)'
+        : estimate.phase === 'reentry'
+          ? 'Estimated re-entry'
+          : 'Estimated position'
     dataState = 'estimated'
   } else if (!state.loading && updatedAt) {
     label = `Updated ${formatUpdateAge(
@@ -1084,6 +1155,7 @@ async function main() {
 
   const meta = getMeta()
   let mapApi = ensureMap(null, !meta.hasFlightPath)
+  restoreView()
   let latest = { ship: null, loading: true, error: null, lastMovedAt: null }
 
   const tick = (state) => {
@@ -1104,6 +1176,8 @@ async function main() {
       window.location.reload()
       return
     }
+    // A new version of the site was deployed: reload to pick it up.
+    if (flight.build && info.build && info.build !== flight.build) scheduleReload()
     countdownPaused = info.paused === true
     if (Number.isFinite(info.landingMissionTime)) {
       setLandingMissionTime(info.landingMissionTime)
@@ -1123,7 +1197,8 @@ async function main() {
       mapApi.update({
         ship: null,
         liveTrail: state.liveTrail,
-        spaceNoticesExtension: state.spaceNoticesExtension,
+        plannedPath: state.plannedPath,
+        booster: state.booster,
       })
       return
     }
@@ -1132,7 +1207,8 @@ async function main() {
     mapApi.update({
       ship: state.ship,
       liveTrail: state.liveTrail,
-      spaceNoticesExtension: state.spaceNoticesExtension,
+      plannedPath: state.plannedPath,
+      booster: state.booster,
     })
   })
 
