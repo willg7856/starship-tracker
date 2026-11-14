@@ -7,6 +7,7 @@ import { thinLatLonPath } from './trail.js'
 import { formatLatLon, haversineKm, isNearSurface } from './utils.js'
 
 const FOLLOW_ZOOM = 8
+const ORBIT_FOLLOW_ZOOM = 4
 const PAD_STILL_ALT_M = 1500
 const PAD_STILL_KM = 5
 
@@ -84,14 +85,20 @@ export function createMap(container, { prelaunch = false } = {}) {
   const meta = getMeta()
   const paths = buildFlightPath()
   const notices = getNoticePolygons()
-  /** @type {'follow' | 'wide' | 'auto'} */
+  /**
+   * follow: keep the ship centred every update (zoom is the viewer's).
+   * wide: fit the whole flight. free: the viewer dragged the map.
+   * @type {'follow' | 'wide' | 'free'}
+   */
   let camera = prelaunch ? 'wide' : 'follow'
+  // Until the viewer picks a camera, switch to Follow once the ship flies.
+  let viewerChoseCamera = false
+  let latestAltitude = null
   // Off by default: the zones cover a lot of ocean. The toggle shows them.
   let showHazards = false
   let fittedCamera = null
   let latestLive = null
   let latestFullPath = []
-  let userInteracting = false
   let activeWraps = [0]
 
   const layers = {
@@ -354,6 +361,7 @@ export function createMap(container, { prelaunch = false } = {}) {
       }
       const btn = e.target.closest('button[data-camera]')
       if (!btn) return
+      viewerChoseCamera = true
       setCamera(btn.dataset.camera, true)
     })
   }
@@ -368,7 +376,6 @@ export function createMap(container, { prelaunch = false } = {}) {
   function setCamera(next, force = false) {
     camera = next
     fittedCamera = null
-    userInteracting = false
     syncCameraButtons()
     applyCamera(force)
   }
@@ -405,21 +412,33 @@ export function createMap(container, { prelaunch = false } = {}) {
     return L.latLngBounds(points)
   }
 
+  /** The ship's position on the world copy nearest the current view. */
+  function nearestCopy(latlng) {
+    const centerLng = map.getCenter().lng
+    const shift = Math.round((centerLng - latlng[1]) / 360) * 360
+    return [latlng[0], latlng[1] + shift]
+  }
+
   function applyCamera(force = false) {
-    if (userInteracting && !force) return
+    if (camera === 'free') return
 
     if (camera === 'follow') {
       if (!latestLive) return
+      const target = nearestCopy(latestLive)
       if (!force && fittedCamera === 'follow') {
-        map.panTo(latestLive, { animate: true, duration: 0.45 })
+        // Keep the viewer's zoom; just keep the ship centred.
+        map.panTo(target, { animate: true, duration: 0.45, noMoveStart: true })
         return
       }
       fittedCamera = 'follow'
-      map.setView(latestLive, FOLLOW_ZOOM, { animate: !force, duration: 0.5 })
+      // Orbit needs a much wider view than ascent or landing.
+      const zoom =
+        Number.isFinite(latestAltitude) && latestAltitude > 100_000 ? ORBIT_FOLLOW_ZOOM : FOLLOW_ZOOM
+      map.setView(target, zoom, { animate: !force, duration: 0.5 })
       return
     }
 
-    if (camera === 'wide' || camera === 'auto') {
+    if (camera === 'wide') {
       if (!force && fittedCamera === 'wide') return
       fittedCamera = 'wide'
       const bounds = overviewBounds()
@@ -444,13 +463,14 @@ export function createMap(container, { prelaunch = false } = {}) {
     setCamera('wide', true)
   }
 
-  map.on('dragstart zoomstart', () => {
-    if (camera === 'follow') {
-      userInteracting = true
-      camera = 'auto'
-      fittedCamera = null
-      syncCameraButtons()
-    }
+  // Only a drag means the viewer wants to look elsewhere. Zooming (buttons,
+  // wheel, pinch) keeps following. Programmatic moves never fire dragstart.
+  map.on('dragstart', () => {
+    if (camera === 'free') return
+    viewerChoseCamera = true
+    camera = 'free'
+    fittedCamera = null
+    syncCameraButtons()
   })
 
   map.on('moveend zoomend', () => {
@@ -492,8 +512,10 @@ export function createMap(container, { prelaunch = false } = {}) {
         source.plannedLanding = null
       }
 
-      if (camera === 'auto' && !landed) {
+      latestAltitude = current.altitude
+      if (!viewerChoseCamera && camera !== 'follow' && !landed && !stillOnPad) {
         camera = 'follow'
+        fittedCamera = null
         syncCameraButtons()
       }
 

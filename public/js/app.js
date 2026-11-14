@@ -41,9 +41,35 @@ const SPACEX_WEBCAST = missionPageUrl
 const SIMULCASTS = {
   15: 'F0ltKM5qc7A', // Space.com simulcast of the SpaceX Flight 15 webcast
 }
-const LIVESTREAM_EMBED = SIMULCASTS[flight.flight]
-  ? `https://www.youtube-nocookie.com/embed/${SIMULCASTS[flight.flight]}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
-  : ''
+/**
+ * Space.com's YouTube channel (VideoFromSpace). Outside the launch window the
+ * player shows whatever this channel is streaming live (re-entry and catch
+ * coverage, future flights), and YouTube's offline screen between streams.
+ */
+const LIVE_CHANNEL = 'UCVTomc35agH1SM6kCKzwW_g'
+const LAUNCH_STREAM_FROM_S = -60 * 60
+const LAUNCH_STREAM_UNTIL_S = 2 * 3600
+
+/** Seconds from SpaceX's T-0 (or the observed liftoff), by the wall clock. */
+function secondsFromT0() {
+  try {
+    const m = getMeta()
+    const t0 = m.actualLiftoffMs ?? m.plannedLiftoffMs
+    return Number.isFinite(t0) ? (Date.now() - t0) / 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/** The flight's launch simulcast around liftoff, otherwise the live channel. */
+function defaultEmbed() {
+  const video = SIMULCASTS[flight.flight]
+  const t = secondsFromT0()
+  if (video && t != null && t >= LAUNCH_STREAM_FROM_S && t <= LAUNCH_STREAM_UNTIL_S) {
+    return `https://www.youtube-nocookie.com/embed/${video}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
+  }
+  return `https://www.youtube.com/embed/live_stream?channel=${LIVE_CHANNEL}&autoplay=1&mute=1&playsinline=1`
+}
 /** Open the Watch panel by itself from webcast start until well after liftoff. */
 const AUTO_OPEN_FROM_S = -50 * 60
 const AUTO_OPEN_UNTIL_S = 2 * 3600
@@ -51,8 +77,6 @@ const LIVESTREAM_DISMISSED_KEY = 'bsz-livestream-dismissed'
 let openLivestream = null
 let livestreamAutoOpened = false
 const LIVESTREAM_KEY = 'bsz-livestream-urls'
-const SPLIT_KEY = 'bsz-split-view'
-const PASTE_STREAM_NOTE = `Paste the ${flightLabel || 'Starship'} webcast link (YouTube or Twitch) once it is live.`
 /**
  * Movement off the pad, not the planned clock. SpaceX mission_time already
  * ticks while the ship is sitting at Starbase, so T+ starts only after we
@@ -189,6 +213,11 @@ function renderShell(root) {
               <span class="topbar-metric-value" data-live="speed">— <span>km/h</span></span>
             </div>
             <p class="status-line" data-state="loading">Updated —</p>
+            ${
+              flight.webcastUrl
+                ? `<a class="monitor-x" href="${flight.webcastUrl}" target="_blank" rel="noreferrer" hidden>SpaceX on X ↗</a>`
+                : ''
+            }
             <button type="button" class="monitor-exit" hidden>Exit</button>
           </div>
         </div>
@@ -210,7 +239,6 @@ function renderShell(root) {
             <button type="button" class="watch-toggle" aria-expanded="false" aria-controls="livestream">
               Watch
             </button>
-            <button type="button" class="split-toggle" aria-pressed="false" title="Stream on the left, map on the right">Split view</button>
             <button type="button" class="monitor-toggle" title="One-screen monitoring display: stream, map and flight timeline">Fullscreen</button>
             <button type="button" class="theme-toggle">Dark</button>
             ${
@@ -232,9 +260,10 @@ function renderShell(root) {
             <div>
               <h2>Livestreams</h2>
               <p>
-                Two players side by side. Paste a YouTube or Twitch link in either, or start with the
-                <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">SpaceX webcast</a>
-                simulcast.
+                Plays Space.com's live coverage when they're streaming. SpaceX's own broadcast is on X
+                and can't be embedded:
+                <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">watch SpaceX live on X ↗</a>.
+                Paste a YouTube or Twitch link in either player to swap streams.
               </p>
             </div>
             <button type="button" class="livestream-close">Close</button>
@@ -387,53 +416,23 @@ function renderShell(root) {
         return
       }
       if (index === 0) {
-        playSlot(slot, LIVESTREAM_EMBED)
-        if (!LIVESTREAM_EMBED) {
-          showSlotNote(slot, PASTE_STREAM_NOTE)
-        }
+        playSlot(slot, defaultEmbed())
       }
     })
   }
 
   const appEl = document.querySelector('.app')
-  const splitBtn = document.querySelector('.split-toggle')
-  const setSplit = (on, { remember = true } = {}) => {
-    appEl.classList.toggle('split', on)
-    splitBtn.classList.toggle('active', on)
-    splitBtn.setAttribute('aria-pressed', String(on))
-    if (remember) {
-      try {
-        localStorage.setItem(SPLIT_KEY, on ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-    }
-    if (on && livestream.hidden) setLivestreamOpen(true)
-    requestAnimationFrame(() => {
-      window.dispatchEvent(new Event('resize'))
-      if (on) {
-        // Fill the screen under the fixed top bar.
-        const stage = document.querySelector('.stage')
-        const topbarH = document.querySelector('.topbar')?.offsetHeight ?? 0
-        window.scrollTo({ top: stage.getBoundingClientRect().top + window.scrollY - topbarH, behavior: 'smooth' })
-      }
-    })
-  }
   const setLivestreamOpen = (open) => {
     livestream.hidden = !open
     watchBtn.setAttribute('aria-expanded', String(open))
     watchBtn.classList.toggle('active', open)
     if (open) startSlots()
-    // Split view needs the stream; closing the stream leaves it.
-    if (!open && appEl.classList.contains('split')) setSplit(false)
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
   }
-  splitBtn.addEventListener('click', () => setSplit(!appEl.classList.contains('split')))
 
   // Fullscreen monitoring display: stream + map side by side, flight
   // timeline along the bottom, no page scrolling.
   const monitorExit = document.querySelector('.monitor-exit')
-  let splitBeforeMonitor = false
   const relayout = () =>
     requestAnimationFrame(() => {
       syncTopbar()
@@ -441,10 +440,10 @@ function renderShell(root) {
     })
   const enterMonitor = async () => {
     if (appEl.classList.contains('monitor')) return
-    splitBeforeMonitor = appEl.classList.contains('split')
-    appEl.classList.add('monitor', 'split')
+    appEl.classList.add('monitor')
     document.documentElement.classList.add('monitoring')
     monitorExit.hidden = false
+    document.querySelector('.monitor-x')?.removeAttribute('hidden')
     if (livestream.hidden) setLivestreamOpen(true)
     window.scrollTo(0, 0)
     try {
@@ -459,9 +458,9 @@ function renderShell(root) {
   const exitMonitor = () => {
     if (!appEl.classList.contains('monitor')) return
     appEl.classList.remove('monitor')
-    if (!splitBeforeMonitor) appEl.classList.remove('split')
     document.documentElement.classList.remove('monitoring')
     monitorExit.hidden = true
+    document.querySelector('.monitor-x')?.setAttribute('hidden', '')
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
     relayout()
   }
@@ -474,11 +473,6 @@ function renderShell(root) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') exitMonitor()
   })
-  try {
-    if (localStorage.getItem(SPLIT_KEY) === '1') setSplit(true, { remember: false })
-  } catch {
-    /* ignore */
-  }
   const rememberDismissed = () => {
     try {
       sessionStorage.setItem(LIVESTREAM_DISMISSED_KEY, '1')
@@ -512,10 +506,7 @@ function renderShell(root) {
     })
     slot.querySelector('.livestream-reset')?.addEventListener('click', () => {
       slot.querySelector('input').value = ''
-      playSlot(slot, LIVESTREAM_EMBED)
-      if (!LIVESTREAM_EMBED) {
-        showSlotNote(slot, PASTE_STREAM_NOTE)
-      }
+      playSlot(slot, defaultEmbed())
       rememberStreams()
     })
     slot.querySelector('.livestream-clear')?.addEventListener('click', () => {
@@ -923,7 +914,7 @@ function renderMissionClock(state, nowMs) {
 
 /** Pop the stream open once per visit while the webcast is on, unless closed. */
 function maybeAutoOpenLivestream() {
-  if (livestreamAutoOpened || !openLivestream || !LIVESTREAM_EMBED || clockStopped) return
+  if (livestreamAutoOpened || !openLivestream || !SIMULCASTS[flight.flight] || clockStopped) return
   // Wall clock against SpaceX's T-0 (or the observed liftoff), not the
   // displayed clock, which sits at T-0 during a hold or a telemetry gap.
   let t0 = null
