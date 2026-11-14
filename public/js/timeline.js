@@ -67,7 +67,7 @@ export function setupTimeline(timeline) {
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer)
     resizeTimer = setTimeout(() => {
-      if (lastCurrent != null) scrollListTo(Math.max(0, lastCurrent))
+      if (lastCurrent != null) scrollListTo(Math.max(0, parseInt(lastCurrent, 10) || 0))
     }, 150)
   })
 }
@@ -109,14 +109,17 @@ export function renderTimeline(missionSeconds, { holding, stopped, launched }) {
   }
   const next = current + 1 < events.length ? current + 1 : -1
 
-  if (current !== lastCurrent) {
+  const key = `${current}/${stopped}`
+  if (key !== lastCurrent) {
     for (const li of listEl.children) {
       const i = Number(li.dataset.index)
-      li.dataset.state =
-        i < current ? 'done' : i === current ? 'current' : i === next ? 'next' : 'upcoming'
+      // Flight over: every milestone is done.
+      li.dataset.state = stopped
+        ? 'done'
+        : i < current ? 'done' : i === current ? 'current' : i === next ? 'next' : 'upcoming'
     }
     scrollListTo(Math.max(0, current))
-    lastCurrent = current
+    lastCurrent = key
   }
 
   if (!nextEls.length) return
