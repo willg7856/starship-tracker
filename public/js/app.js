@@ -1034,8 +1034,36 @@ function landedClockSeconds(state) {
     current.mission_time > 30
   ) {
     rememberLandedElapsed(current.mission_time, false)
+  } else if (flownPerSpaceXClock(state)) {
+    // Opened after the flight: this browser never saw it fly, so stop the
+    // clock at SpaceX's planned landing time.
+    rememberLandedElapsed(flight.landingMissionTime, false)
   }
   return landedElapsedSeconds
+}
+
+/**
+ * SpaceX's own mission clock is past the planned landing, and so is the
+ * planned timeline: the flight has happened, even if this browser only ever
+ * saw the ship at rest (opened after a catch). Before launch, or after a
+ * scrub that moves T-0, neither holds.
+ */
+function flownPerSpaceXClock(state) {
+  const current = state?.ship?.current
+  const landing = flight.landingMissionTime
+  let planned = null
+  try {
+    planned = getMeta().plannedLiftoffMs
+  } catch {
+    planned = null
+  }
+  if (!current || current.estimated || !Number.isFinite(landing) || typeof planned !== 'number') return false
+  return (
+    Number.isFinite(current.mission_time) &&
+    current.mission_time > landing &&
+    current.mission_time < MAX_MISSION_S &&
+    Date.now() - planned > landing * 1000
+  )
 }
 
 /**
@@ -1052,6 +1080,7 @@ function caughtBackAtStarbase(state) {
   }
   if (meta.landingFix?.kind !== 'catch') return false
   if (Number.isFinite(state.landedElapsedSeconds)) return true
+  if (flownPerSpaceXClock(state)) return true
   const liftoff = liftoffConfirmed ? liftoffAtMs : meta.actualLiftoffMs
   return seenFlying && Number.isFinite(liftoff) && Date.now() - liftoff > 3600 * 1000
 }
@@ -1260,14 +1289,18 @@ function renderTelemetry(state) {
   // Pad GPS sits a few metres off the surveyed point. Show that as still on the pad.
   const onPad = Number.isFinite(rangeKm) && rangeKm < 0.15
   const downrange = onPad ? '0 m' : formatDownrange(rangeKm)
-  const rangeNote = onPad ? 'on the pad' : 'from pad'
+  const rangeNote = onPad ? (clockStopped ? 'back on the pad' : 'on the pad') : 'from pad'
   let traveledKm = 0
   try {
     traveledKm = distanceAlongTrailKm(loadLiveTrail())
   } catch {
     traveledKm = 0
   }
-  let traveled = onPad ? '0 m' : formatDownrange(traveledKm)
+  // The whole flight path (this browser's record plus the orbit-based
+  // backfill), so a visitor who arrives late still sees the full distance.
+  traveledKm = Math.max(traveledKm, pathStats(state.mapTrail || state.liveTrail).distanceKm)
+  // Back on the pad after a catch is still a flight flown.
+  let traveled = onPad && traveledKm < 1 ? '0 m' : formatDownrange(traveledKm)
   let traveledNote = 'total'
   if (current.estimated === 'reentry' || current.estimated === 'plan') {
     traveled = '—'
@@ -1404,6 +1437,38 @@ function fixEcef(p) {
   return [(n + h) * Math.cos(φ) * Math.cos(λ), (n + h) * Math.cos(φ) * Math.sin(λ), (n * (1 - e2) + h) * Math.sin(φ)]
 }
 
+/**
+ * Distance flown and top speed along a path, in 3D at the ship's altitude
+ * (Earth-fixed, so relative to the ground). Cached per path.
+ */
+let pathStatsCache = { key: '', value: { distanceKm: 0, topSpeed: null } }
+function pathStats(trail) {
+  const list = Array.isArray(trail) ? trail : []
+  const key = `${list.length}/${list[0]?.gps_time}/${list[list.length - 1]?.gps_time}`
+  if (key === pathStatsCache.key) return pathStatsCache.value
+  const speeds = []
+  let distanceKm = 0
+  let prev = null
+  for (const p of list) {
+    if (!p || !Number.isFinite(p.gps_time)) continue
+    const pos = fixEcef(p)
+    if (!pos) continue
+    if (prev) {
+      const d = Math.hypot(pos[0] - prev.pos[0], pos[1] - prev.pos[1], pos[2] - prev.pos[2])
+      const dt = p.gps_time - prev.t
+      if (dt > 0 && d / dt < 9000) {
+        distanceKm += d / 1000
+        if (dt >= 1 && dt <= 180) speeds.push(d / dt)
+      }
+    }
+    prev = { pos, t: p.gps_time }
+  }
+  speeds.sort((a, b) => a - b)
+  const value = { distanceKm, topSpeed: speeds.length >= 5 ? speeds[Math.floor(speeds.length * 0.98)] : null }
+  pathStatsCache = { key, value }
+  return value
+}
+
 function formatFlightTime(seconds) {
   const s = Math.max(0, Math.round(seconds))
   const h = Math.floor(s / 3600)
@@ -1439,26 +1504,7 @@ function renderSummary(state, nowMs) {
   for (const p of trail) if (Number.isFinite(p.altitude) && (maxAlt == null || p.altitude > maxAlt)) maxAlt = p.altitude
   // Top speed: a high percentile of fix-to-fix speeds, so one noisy pair
   // can't set the record.
-  // Speed and distance in 3D at the ship's altitude (Earth-fixed, so
-  // relative to the ground).
-  const speeds = []
-  let distance = 0
-  let prev = null
-  for (const p of trail) {
-    const pos = fixEcef(p)
-    if (!pos) continue
-    if (prev) {
-      const d = Math.hypot(pos[0] - prev.pos[0], pos[1] - prev.pos[1], pos[2] - prev.pos[2])
-      const dt = p.gps_time - prev.t
-      if (dt > 0 && d / dt < 9000) {
-        distance += d / 1000
-        if (dt >= 1 && dt <= 180) speeds.push(d / dt)
-      }
-    }
-    prev = { pos, t: p.gps_time }
-  }
-  speeds.sort((a, b) => a - b)
-  const topSpeed = speeds.length >= 5 ? speeds[Math.floor(speeds.length * 0.98)] : null
+  const { distanceKm: distance, topSpeed } = pathStats(trail)
 
   const w = orbitWindow()
   const insertion = (flight.timeline || []).find((e) => /insertion/i.test(e.label))?.t ?? w.from
