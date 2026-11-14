@@ -1222,10 +1222,17 @@ function renderStatus(state, nowMs) {
           : 'Estimated position'
     dataState = 'estimated'
   } else if (!state.loading && updatedAt) {
-    label = `Updated ${formatUpdateAge(
-      Math.max(0, Math.floor((nowMs - updatedAt.getTime()) / 1000)),
-    )}`
-    dataState = 'live'
+    // Age of SpaceX's latest position (from its own timestamp), not of our
+    // last request: counts up between SpaceX's ~30 s updates and drops back
+    // the moment a new fix arrives. gps_time is true GPS time (UTC + 18 s).
+    const gps = state.ship?.current?.gps_time
+    const fixMs =
+      state.positionSource === 'spacex' && Number.isFinite(gps)
+        ? (gps + GPS_TO_UNIX_OFFSET - GPS_LEAP_SECONDS) * 1000
+        : updatedAt.getTime()
+    const age = Math.max(0, Math.floor((nowMs - fixMs) / 1000))
+    label = `Updated ${formatUpdateAge(age)}`
+    dataState = age > 90 ? 'waiting' : 'live'
   } else if (!state.loading && !state.ship?.current) {
     label = launchedPerSpaceXClock(state)
       ? 'No live position from SpaceX'
