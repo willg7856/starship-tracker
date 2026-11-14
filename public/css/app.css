@@ -2162,3 +2162,93 @@ html[data-theme='dark'] {
 .app.monitor .timeline-source {
   display: none;
 }
+
+/* ------------------------------------------------------------------
+ * Fullscreen polish.
+ * ------------------------------------------------------------------ */
+
+/* Theme switch in the Fullscreen top bar (styled like Exit). */
+.monitor-theme {
+  appearance: none;
+  align-self: center;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--nav-line);
+  background: transparent;
+  color: var(--nav-fg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.monitor-theme:hover {
+  border-color: #ff5a1f;
+  color: #ff7a47;
+}
+
+.monitor-theme[hidden] {
+  display: none;
+}
+
+/* Hide the cursor when the mouse is idle (3 s) in Fullscreen. */
+.app.monitor.monitor-idle,
+.app.monitor.monitor-idle * {
+  cursor: none !important;
+}
+
+/* Wide screens: the top row is exactly the height of a 16:9 video in half
+ * the width, so the stream has no black bars; the timeline / fix strip
+ * below takes the rest. Clamped so neither row gets squeezed. */
+@media (min-width: 900px) {
+  .app.monitor .stage {
+    flex: 0 0 auto;
+    height: clamp(45vh, calc(50vw * 9 / 16), 72vh);
+    height: clamp(45dvh, calc(50vw * 9 / 16), 72dvh);
+    min-height: 0;
+  }
+
+  .app.monitor .lower {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 140px;
+  }
+
+  .app.monitor .livestream-slot[data-slot='0'] {
+    justify-content: center;
+  }
+
+  .app.monitor .livestream-frame {
+    width: 100%;
+    max-height: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  html.monitoring .monitor-theme {
+    padding: 0.2rem 0.5rem;
+  }
+}
+
+/* Keep the Fullscreen top bar on one line on laptop screens: drop the
+ * "Powered by" label (the page footer still credits BSZ) and tighten. */
+@media (min-width: 721px) and (max-width: 1599px) {
+  html.monitoring .topbar .powered-by {
+    display: none;
+  }
+
+  html.monitoring .topbar-inner {
+    justify-content: center;
+  }
+
+  html.monitoring .topbar-metrics {
+    flex-wrap: nowrap;
+    gap: 0.35rem 1rem;
+  }
+}
+
+/* Fullscreen: the top bar may use the whole screen width. */
+html.monitoring .topbar-inner {
+  max-width: none;
+}
