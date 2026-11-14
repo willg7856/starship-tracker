@@ -308,6 +308,30 @@ export function createMap(container, { prelaunch = false } = {}) {
   function rebuildStarlink() {
     clearLayerList(map, layers.starlink)
     if (!showStarlink || !source.starlink) return
+    // Trail behind the batch that fades out the further back it goes: one
+    // short segment per step, opacity rising toward the marker.
+    const trail = source.starlink.trail
+    if (Array.isArray(trail) && trail.length >= 2) {
+      let pts = unwrapRing(trail)
+      const anchor = Math.round(pts[pts.length - 1][1] / 360) * 360
+      if (anchor !== 0) pts = shiftLatLngs(pts, -anchor)
+      const n = pts.length - 1
+      for (const offset of activeWraps) {
+        for (let i = 0; i < n; i++) {
+          const opacity = 0.05 + 0.85 * ((i + 1) / n) ** 1.5
+          layers.starlink.push(
+            L.polyline(shiftLatLngs([pts[i], pts[i + 1]], offset), {
+              color: '#3b82f6',
+              weight: 3,
+              opacity,
+              lineCap: 'round',
+              interactive: false,
+              renderer: vectorRenderer,
+            }).addTo(map),
+          )
+        }
+      }
+    }
     for (const offset of activeWraps) {
       layers.starlink.push(
         L.circleMarker(shiftLatLng(source.starlink.latlng, offset), {
@@ -319,6 +343,12 @@ export function createMap(container, { prelaunch = false } = {}) {
           renderer: vectorRenderer,
         })
           .bindPopup(source.starlink.popup)
+          .bindTooltip(source.starlink.label, {
+            permanent: true,
+            direction: 'right',
+            offset: [8, 0],
+            className: 'starlink-label',
+          })
           .addTo(map),
       )
     }
@@ -546,15 +576,21 @@ export function createMap(container, { prelaunch = false } = {}) {
 
   return {
     update({ ship, liveTrail = [], plannedPath = null, booster = null, starlink = null }) {
+      const shipName = meta.vehicle || 'Starship'
+      const apart = Number.isFinite(starlink?.distanceKm)
+        ? `≈ ${Math.round(starlink.distanceKm).toLocaleString('en-US')} km from ${shipName}`
+        : null
       source.starlink = starlink
         ? {
             latlng: [starlink.latitude, starlink.longitude],
+            trail: starlink.trail,
+            label: apart ? `Starlinks · ${apart}` : 'Starlinks',
             popup: `<strong>${starlink.name}</strong><br>${formatLatLon(
               starlink.latitude,
               starlink.longitude,
             )}<br>${Math.round(starlink.altitude / 1000)} km · ${Math.round(
               starlink.speed * 3.6,
-            ).toLocaleString('en-US')} km/h<br>From SpaceX's published orbit`,
+            ).toLocaleString('en-US')} km/h${apart ? `<br>${apart}` : ''}<br>From SpaceX's published orbit`,
           }
         : null
       const starlinkBtn = cameraEl?.querySelector('button[data-starlink]')
