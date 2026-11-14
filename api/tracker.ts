@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { status, body } = await fetchSpaceXTracker()
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Cache-Control', status === 200 ? 'public, max-age=1, s-maxage=1' : 'no-store')
+    res.setHeader('Cache-Control', status === 200 ? 'public, max-age=1, s-maxage=2, stale-while-revalidate=5' : 'no-store')
     res.status(status).send(body)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'

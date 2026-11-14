@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // connection is retried soon.
     res.setHeader(
       'Cache-Control',
-      orbit ? 'public, max-age=300, s-maxage=900' : 'public, max-age=60, s-maxage=60',
+      orbit ? 'public, max-age=300, s-maxage=900, stale-while-revalidate=3600' : 'public, max-age=60, s-maxage=60',
     )
     res.status(200).json({ flight: info?.flight ?? null, orbit, payload })
   } catch (err) {

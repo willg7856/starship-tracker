@@ -1,6 +1,7 @@
 import { discoverFlight, fetchSpaceXTracker } from '../api/_flight.js'
 import { discoverOrbits } from '../api/_orbit.js'
 import { discoverHazards } from '../api/_hazards.js'
+import { starlinkTles } from '../api/_starlinks.js'
 
 type Env = { ASSETS: Fetcher }
 
@@ -51,7 +52,7 @@ async function flightInfo(): Promise<Response> {
       return Response.json({ error: 'SpaceX lists no Starship flight' }, { status: 502 })
     }
     return Response.json(info, {
-      headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' },
+      headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15, stale-while-revalidate=60' },
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'
@@ -72,7 +73,7 @@ async function flightLaunchTime(): Promise<Response> {
         landingMissionTime: info.landingMissionTime,
         flight: info.flight,
       },
-      { headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15' } },
+      { headers: { 'Cache-Control': 'public, max-age=15, s-maxage=15, stale-while-revalidate=60' } },
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upstream fetch failed'
@@ -135,7 +136,7 @@ export default {
         status,
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': status === 200 ? 'public, max-age=1, s-maxage=1' : 'no-store',
+          'Cache-Control': status === 200 ? 'public, max-age=1, s-maxage=2, stale-while-revalidate=5' : 'no-store',
         },
       })
     }
@@ -171,7 +172,19 @@ export default {
     }
 
     if (pathname === '/api/ship-trail') {
-      return proxyDiscovered('trajectoryUrl', 'public, max-age=15, s-maxage=15', 'Ship trail')
+      return proxyDiscovered('trajectoryUrl', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60', 'Ship trail')
+    }
+
+    if (pathname === '/api/starlinks') {
+      const data = await starlinkTles()
+      if (!data) return Response.json({ error: 'Starlink orbits unavailable' }, { status: 502 })
+      return new Response(data.body, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'X-Satellite-Count': String(data.count),
+          'Cache-Control': 'public, max-age=3600, s-maxage=7200, stale-while-revalidate=86400',
+        },
+      })
     }
 
     if (pathname === '/api/hazards') {
