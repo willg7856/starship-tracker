@@ -19,7 +19,51 @@ const MISSIONS = `${CMS}/cms-assets/future_missions.json`
 const UPCOMING_TILES = `${CMS}/api/spacex-website/launches-page-tiles/upcoming`
 const ALL_TILES = `${CMS}/api/spacex-website/launches-page-tiles`
 const MISSION_PAGE = `${CMS}/api/spacex-website/missions/`
-export const SPACEX_TRACKER = `${CMS}/cms-assets/starship_tracker_public.json`
+/**
+ * SpaceX's public vehicle tracker file. The public CDN copy on
+ * content.spacex.com stopped updating in July 2026; the same file is still
+ * published live (about every 30 s) in SpaceX's content storage, which the
+ * old sxcontent9668.azureedge.us tracker address fronted. Read that first.
+ */
+export const SPACEX_TRACKER_SOURCES = [
+  'https://sxcontent9668.blob.core.usgovcloudapi.net/cms-assets/starship_tracker_public.json',
+  `${CMS}/cms-assets/starship_tracker_public.json`,
+]
+export const SPACEX_TRACKER = SPACEX_TRACKER_SOURCES[0]
+
+/**
+ * The tracker JSON from the first source that has any vehicle in it (an
+ * empty `{}` from one source falls through to the next). Returns the raw
+ * text so the proxy passes SpaceX's data through untouched.
+ */
+export async function fetchSpaceXTracker(): Promise<{ status: number; body: string }> {
+  let last = { status: 502, body: JSON.stringify({ error: 'SpaceX tracker unavailable' }) }
+  for (const url of SPACEX_TRACKER_SOURCES) {
+    try {
+      const res = await fetch(`${url}?t=${Date.now()}`, { headers: { Accept: 'application/json' } })
+      if (!res.ok) {
+        last = { status: res.status, body: JSON.stringify({ error: `SpaceX tracker returned ${res.status}` }) }
+        continue
+      }
+      const body = await res.text()
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(body)
+      } catch {
+        parsed = null
+      }
+      const hasVehicle =
+        !!parsed &&
+        typeof parsed === 'object' &&
+        Object.entries(parsed as Record<string, { current?: unknown }>).some(([, v]) => !!v?.current)
+      last = { status: 200, body }
+      if (hasVehicle) return last
+    } catch (err) {
+      last = { status: 502, body: JSON.stringify({ error: err instanceof Error ? err.message : 'fetch failed' }) }
+    }
+  }
+  return last
+}
 const NOTICES = 'https://data.space-notices.com/space-notices-data'
 
 const RECENT_MS = 36 * 3600 * 1000
@@ -204,7 +248,13 @@ async function shipFromNotices(flight: number): Promise<number | null> {
 
 /** One live `shipNN` in SpaceX's tracker, if there is exactly one. */
 async function shipFromTracker(): Promise<number | null> {
-  const raw = await getJson<Record<string, { current?: unknown }>>(`${SPACEX_TRACKER}?t=${Date.now()}`)
+  let raw: Record<string, { current?: unknown }> | null = null
+  try {
+    const { status, body } = await fetchSpaceXTracker()
+    raw = status === 200 ? (JSON.parse(body) as Record<string, { current?: unknown }>) : null
+  } catch {
+    raw = null
+  }
   if (!raw || typeof raw !== 'object') return null
   const ships = Object.keys(raw)
     .map((k) => /^ship(\d+)$/i.exec(k))

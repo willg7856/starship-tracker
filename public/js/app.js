@@ -10,7 +10,7 @@ import {
 import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
 import { startTracker } from './tracker.js'
 import { renderTimeline, setupTimeline } from './timeline.js'
-import { orbitSource, orbitWindow } from './orbit.js'
+import { orbitSource, orbitWindow, starlinkFixAt } from './orbit.js'
 import {
   GPS_TO_UNIX_OFFSET,
   MAX_MISSION_S,
@@ -348,6 +348,18 @@ function renderShell(root) {
             </div>
           </div>
           <dl class="telemetry-grid"></dl>
+          <div class="compare" hidden>
+            <h3>Ship vs Starlink satellites</h3>
+            <p class="compare-note" data-compare="compare-note"></p>
+            <table class="compare-table">
+              <thead><tr><th></th><th data-compare="ship-name">Ship</th><th data-compare="sat-name">Starlinks</th><th>Difference</th></tr></thead>
+              <tbody>
+                <tr><th>Altitude</th><td data-compare="ship-alt"></td><td data-compare="sat-alt"></td><td data-compare="d-alt"></td></tr>
+                <tr><th>Speed</th><td data-compare="ship-spd"></td><td data-compare="sat-spd"></td><td data-compare="d-spd"></td></tr>
+                <tr><th>Distance apart</th><td colspan="3" data-compare="sep"></td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -1058,11 +1070,15 @@ function renderTelemetry(state) {
   if (current.estimated === 'reentry' || current.estimated === 'plan') {
     traveled = '—'
     traveledNote = 'estimate'
-  } else if (current.estimated && Number.isFinite(current.speed) && Number.isFinite(current.mission_time)) {
-    // Estimated fixes: distance flown on orbit since engine cutoff.
+  } else if (Number.isFinite(current.speed) && current.speed > 1000 && Number.isFinite(current.mission_time)) {
+    // On orbit: distance flown since engine cutoff. Used for estimates, and
+    // for live data when this browser has only seen part of the flight.
     const onOrbitS = Math.max(0, current.mission_time - orbitWindow().from)
-    traveled = `≈ ${formatDownrange((current.speed * onOrbitS) / 1000)}`
-    traveledNote = 'on orbit'
+    const orbitKm = (current.speed * onOrbitS) / 1000
+    if (current.estimated || (onOrbitS > 600 && traveledKm < orbitKm * 0.5)) {
+      traveled = `≈ ${formatDownrange(orbitKm)}`
+      traveledNote = 'on orbit'
+    }
   }
 
   const grid = document.querySelector('.telemetry-grid')
@@ -1071,6 +1087,61 @@ function renderTelemetry(state) {
     <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
     <div><dt>Traveled</dt><dd>${traveled} <span>${traveledNote}</span></dd></div>
   `
+}
+
+/**
+ * Ship (SpaceX's live data, or the estimate) next to the Starlink batch it
+ * deployed (SpaceX's published orbit). Speeds are both ground-relative.
+ */
+/** GPS time has run 18 s ahead of UTC since 2017. */
+const GPS_LEAP_SECONDS = 18
+
+function renderCompare(state) {
+  const box = document.querySelector('.compare')
+  if (!box) return
+  const ship = state.ship?.current
+  // Compare at the moment of the ship's fix (SpaceX publishes about every
+  // 30 s; at 7 km/s that alone is ~200 km). SpaceX's gps_time is true GPS
+  // time, 18 s ahead of UTC.
+  const fixMs = Number.isFinite(ship?.gps_time) && !ship.estimated
+    ? (ship.gps_time + GPS_TO_UNIX_OFFSET - GPS_LEAP_SECONDS) * 1000
+    : Date.now()
+  const sat = starlinkFixAt(fixMs)
+  if (!ship || !sat) {
+    box.hidden = true
+    return
+  }
+  box.hidden = false
+  const set = (k, v) => {
+    const el = box.querySelector(`[data-compare="${k}"]`)
+    if (el && el.textContent !== v) el.textContent = v
+  }
+  const km = (m) => (Number.isFinite(m) ? `${(m / 1000).toFixed(1)} km` : '—')
+  const kmh = (ms) => (Number.isFinite(ms) && ms > 0 ? `${Math.round(ms * 3.6).toLocaleString('en-US')} km/h` : '—')
+  const signed = (v, unit) => (Number.isFinite(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('en-US')} ${unit}` : '—')
+  set('ship-name', getMeta().vehicle || 'Ship')
+  set('sat-name', sat.name)
+  set('ship-alt', km(ship.altitude))
+  set('sat-alt', km(sat.altitude))
+  set('d-alt', Number.isFinite(ship.altitude) ? signed(Math.round((ship.altitude - sat.altitude) / 100) / 10, 'km') : '—')
+  set('ship-spd', kmh(ship.speed))
+  set('sat-spd', kmh(sat.speed))
+  set('d-spd', Number.isFinite(ship.speed) && ship.speed > 0 ? signed(Math.round((ship.speed - sat.speed) * 3.6), 'km/h') : '—')
+  let sep = null
+  const a = ship.r_ecef
+  const b = sat.r_ecef
+  if (Array.isArray(a) && Array.isArray(b) && a.length >= 3) {
+    sep = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) / 1000
+  } else if (Number.isFinite(ship.latitude)) {
+    sep = haversineKm(ship.latitude, ship.longitude, sat.latitude, sat.longitude)
+  }
+  set('sep', Number.isFinite(sep) ? `${Math.round(sep).toLocaleString('en-US')} km` : '—')
+  set(
+    'compare-note',
+    ship.estimated
+      ? "The ship's numbers are an estimate right now, so this comparison isn't meaningful until SpaceX's live data returns."
+      : "Ship: SpaceX's live tracker. Starlinks: SpaceX's published orbit for the batch the ship deployed (via Celestrak).",
+  )
 }
 
 function renderStatus(state, nowMs) {
@@ -1164,6 +1235,7 @@ async function main() {
     renderLiveReadouts(state)
     renderStatus(state, nowMs)
     renderTelemetry(state)
+    renderCompare(state)
   }
 
   tick(latest)
@@ -1199,6 +1271,7 @@ async function main() {
         liveTrail: state.liveTrail,
         plannedPath: state.plannedPath,
         booster: state.booster,
+        starlink: state.starlink,
       })
       return
     }
@@ -1209,6 +1282,7 @@ async function main() {
       liveTrail: state.liveTrail,
       plannedPath: state.plannedPath,
       booster: state.booster,
+      starlink: state.starlink,
     })
   })
 

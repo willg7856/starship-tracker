@@ -1,5 +1,5 @@
-import { SPACEX_TRACKER, discoverFlight } from '../api/_flight.js'
-import { discoverOrbit } from '../api/_orbit.js'
+import { discoverFlight, fetchSpaceXTracker } from '../api/_flight.js'
+import { discoverOrbits } from '../api/_orbit.js'
 import { discoverHazards } from '../api/_hazards.js'
 
 type Env = { ASSETS: Fetcher }
@@ -130,11 +130,13 @@ export default {
     const { pathname } = new URL(request.url)
 
     if (pathname === '/api/tracker') {
-      return proxyUpstream({
-        upstream: SPACEX_TRACKER,
-        cacheControl: 'public, max-age=1, s-maxage=1',
-        bustCache: true,
-        errorLabel: 'SpaceX tracker',
+      const { status, body } = await fetchSpaceXTracker()
+      return new Response(body, {
+        status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': status === 200 ? 'public, max-age=1, s-maxage=1' : 'no-store',
+        },
       })
     }
 
@@ -149,9 +151,11 @@ export default {
     if (pathname === '/api/orbit') {
       try {
         const info = await discoverFlight()
-        const orbit = info ? await discoverOrbit(info.flight, info.ship, info.plannedLiftoff) : null
+        const { best: orbit, payload } = info
+          ? await discoverOrbits(info.flight, info.ship, info.plannedLiftoff)
+          : { best: null, payload: null }
         return Response.json(
-          { flight: info?.flight ?? null, orbit },
+          { flight: info?.flight ?? null, orbit, payload },
           {
             headers: {
               'Cache-Control': orbit

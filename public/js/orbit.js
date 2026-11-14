@@ -28,6 +28,25 @@ const TRAIL_STEP_S = 30
 const TRAIL_MAX_S = 3 * 3600
 
 let orbit = null // { source, label, satrec }
+// The Starlink batch the ship deployed, tracked on its own for comparison.
+let payload = null // { name, satrec, epoch }
+const EARTH_SPIN = 7.2921159e-5 // rad/s
+
+/**
+ * Speed relative to the ground below (m/s), the way SpaceX's tracker and
+ * webcast report it: inertial velocity minus the Earth's rotation.
+ */
+function groundRelativeSpeed(pv, gmst) {
+  const c = Math.cos(gmst)
+  const s = Math.sin(gmst)
+  const r = pv.position
+  const v = pv.velocity
+  const rx = c * r.x + s * r.y
+  const ry = -s * r.x + c * r.y
+  const vx = c * v.x + s * v.y + EARTH_SPIN * ry
+  const vy = -s * v.x + c * v.y - EARTH_SPIN * rx
+  return Math.hypot(vx, vy, v.z) * 1000
+}
 
 function timelineSeconds(pattern, fallback) {
   const e = (flight.timeline || []).find((x) => pattern.test(x.label))
@@ -215,6 +234,17 @@ export async function refreshOrbit() {
     const res = await fetch('/api/orbit', { cache: 'no-cache' })
     if (res.ok) {
       const body = await res.json()
+      if (body?.payload?.omm && body.flight === flight.flight) {
+        try {
+          payload = {
+            name: body.payload.name || 'Starlink satellites',
+            epoch: String(body.payload.omm.EPOCH),
+            satrec: sat.json2satrec(body.payload.omm),
+          }
+        } catch {
+          /* keep the previous one */
+        }
+      }
       if (body?.orbit?.omm && body.flight === flight.flight) {
         next = {
           source: body.orbit.source,
@@ -319,7 +349,6 @@ export function orbitFixAt(ms) {
   const gmst = sat.gstime(date)
   const gd = sat.eciToGeodetic(pv.position, gmst)
   const ecf = sat.eciToEcf(pv.position, gmst)
-  const v = pv.velocity
   const altitude = gd.height * 1000
   if (!(altitude > 80_000 && altitude < 2_000_000)) return null
   return {
@@ -328,7 +357,7 @@ export function orbitFixAt(ms) {
     latitude: sat.degreesLat(gd.latitude),
     longitude: sat.degreesLong(gd.longitude),
     altitude,
-    speed: Math.hypot(v.x, v.y, v.z) * 1000,
+    speed: groundRelativeSpeed(pv, gmst),
     r_ecef: [ecf.x * 1000, ecf.y * 1000, ecf.z * 1000],
     estimated: orbit.source,
   }
@@ -347,4 +376,33 @@ export function orbitTrail(nowMs) {
     if (fix) out.push(fix)
   }
   return out
+}
+
+/** Name of the deployed Starlink batch, when its orbit is known. */
+export function starlinkName() {
+  return payload?.name ?? null
+}
+
+/** The Starlink batch's position at `ms` (after deployment), or null. */
+export function starlinkFixAt(ms) {
+  if (!payload) return null
+  const t0 = liftoffMs()
+  if (!Number.isFinite(t0)) return null
+  const deploy = timelineSeconds(/payload deploy start/i, 35 * 60)
+  if ((ms - t0) / 1000 < deploy) return null
+  const date = new Date(ms)
+  const pv = sat.propagate(payload.satrec, date)
+  if (!pv?.position || typeof pv.position === 'boolean') return null
+  const gmst = sat.gstime(date)
+  const gd = sat.eciToGeodetic(pv.position, gmst)
+  const ecf = sat.eciToEcf(pv.position, gmst)
+  if (!(gd.height > 80 && gd.height < 2000)) return null
+  return {
+    name: payload.name,
+    latitude: sat.degreesLat(gd.latitude),
+    longitude: sat.degreesLong(gd.longitude),
+    altitude: gd.height * 1000,
+    speed: groundRelativeSpeed(pv, gmst),
+    r_ecef: [ecf.x * 1000, ecf.y * 1000, ecf.z * 1000],
+  }
 }

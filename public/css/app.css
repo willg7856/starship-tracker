@@ -1831,3 +1831,76 @@ html.monitoring body {
 .app.monitor .livestream-grid {
   max-width: none;
 }
+
+.map-camera-controls button[hidden] {
+  display: none;
+}
+
+/* Ship vs the Starlink batch it deployed. */
+.compare {
+  margin-top: 1.5rem;
+}
+
+.compare[hidden] {
+  display: none;
+}
+
+.compare h3 {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.compare-note {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.compare-table thead th {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.compare-table tbody th {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.compare-table td {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 560px) {
+  .compare-table th,
+  .compare-table td {
+    padding: 0.45rem 0.4rem;
+    font-size: 0.8rem;
+  }
+}
