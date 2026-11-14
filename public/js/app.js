@@ -8,7 +8,7 @@ import {
   setPlannedLiftoffMs,
 } from './path.js'
 import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
-import { startTracker } from './tracker.js'
+import { isStreamLive, startTracker } from './tracker.js'
 import { renderTimeline, setupTimeline } from './timeline.js'
 import { orbitPeriodS, orbitSource, orbitWindow, starlinkFixAt } from './orbit.js'
 import {
@@ -1367,8 +1367,19 @@ async function main() {
   }
 
   tick(latest)
-  const refreshPlannedLiftoff = async () => {
-    const info = await fetchFlightInfo()
+  const refreshPlannedLiftoff = async () => applyFlightInfo(await fetchFlightInfo())
+  // Pushed over the live stream (no request needed).
+  window.addEventListener('bsz-flight', (e) => {
+    const info = e.detail
+    if (!Number.isFinite(info?.flight)) return
+    try {
+      localStorage.setItem('bsz-flight-info-v1', JSON.stringify(info))
+    } catch {
+      /* ignore */
+    }
+    applyFlightInfo(info)
+  })
+  function applyFlightInfo(info) {
     if (!info) return
     // SpaceX moved on to another flight (36h after liftoff, or a new upcoming
     // flight before launch): reload so every label and feed follows it.
@@ -1391,7 +1402,7 @@ async function main() {
   // when shown.
   let lastFlightCheck = Date.now()
   const liftoffPoll = setInterval(() => {
-    if (document.hidden) return
+    if (document.hidden || isStreamLive()) return
     const planned = getMeta().plannedLiftoffMs
     const nearLiftoff =
       countdownPaused || (Number.isFinite(planned) && Math.abs(Date.now() - planned) < 3600_000)
@@ -1400,7 +1411,8 @@ async function main() {
     void refreshPlannedLiftoff()
   }, 20_000)
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) void refreshPlannedLiftoff()
+    // Coming back: the stream reconnects and sends flight info itself.
+    if (!document.hidden && typeof EventSource !== 'function') void refreshPlannedLiftoff()
   })
 
   const stop = startTracker((state) => {

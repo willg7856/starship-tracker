@@ -28,8 +28,13 @@ import { GPS_TO_UNIX_OFFSET, MAX_MISSION_S, gpsTimeToDate, speedBetweenFixes } f
 const POLL_MS = 2_000
 const IDLE_POLL_MS = 10_000
 // The Space Notices trail only changes when there is real flight data.
-const SHIP_TRAIL_POLL_MS = 120_000
+const SHIP_TRAIL_POLL_MS = 600_000
 const SHIP_KEY = shipKey
+
+// Whether the live stream is connected (it also carries flight info, so the
+// page can skip its own flight checks).
+let streamLiveFn = () => false
+export const isStreamLive = () => streamLiveFn()
 const LAST_FIX_KEY = flightStorageKey('last-fix-v1')
 
 function readLastFix() {
@@ -465,6 +470,14 @@ export function startTracker(onChange) {
       }
       void load(pushed)
     })
+    stream.addEventListener('flight', (e) => {
+      streamHeardAt = Date.now()
+      try {
+        window.dispatchEvent(new CustomEvent('bsz-flight', { detail: JSON.parse(e.data) }))
+      } catch {
+        /* ignore a bad message */
+      }
+    })
     stream.addEventListener('ping', () => {
       streamHeardAt = Date.now()
       streamFailures = 0
@@ -485,6 +498,7 @@ export function startTracker(onChange) {
     }
   }
   const streamUp = () => useStream && stream?.readyState === EventSource.OPEN
+  streamLiveFn = streamUp
 
   // Each tick refreshes the page; with the stream up that needs no request
   // (estimates and clocks move on locally between pushes).
