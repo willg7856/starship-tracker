@@ -41,9 +41,32 @@ export type FlightInfo = {
   timeline: { t: number; label: string }[]
   /** Official SpaceX webcast, when the mission page lists one. */
   webcastUrl: string | null
+  /** Embeddable player for the official webcast (as spacex.com embeds it). */
+  webcastEmbedUrl: string | null
 }
 
 type Webcast = { videoId?: string; streamingVideoType?: string }
+
+/** The webcast SpaceX features: the only one, or the one marked featured. */
+function featuredWebcast(webcasts: Webcast[] | undefined): Webcast | null {
+  const list = (webcasts ?? []).filter((w) => /^[\w-]+$/.test(w.videoId?.trim() ?? ''))
+  if (list.length <= 1) return list[0] ?? null
+  return list.find((w) => (w as { isFeatured?: boolean }).isFeatured) ?? list[0]
+}
+
+/**
+ * Same mapping spacex.com uses for its webcast overlay: X Live Studio
+ * broadcasts embed from studio.x.com (served with frame-ancestors *).
+ */
+function webcastEmbedUrl(webcasts: Webcast[] | undefined): string | null {
+  const w = featuredWebcast(webcasts)
+  if (!w) return null
+  const id = encodeURIComponent(w.videoId!.trim())
+  const type = (w.streamingVideoType ?? '').toLowerCase()
+  if (type === 'x-live-studio') return `https://studio.x.com/embed/broadcast/${id}`
+  if (type === 'youtube') return `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&playsinline=1`
+  return null
+}
 
 function webcastUrl(webcasts: Webcast[] | undefined): string | null {
   for (const w of webcasts ?? []) {
@@ -288,6 +311,7 @@ export async function discoverFlight(): Promise<FlightInfo | null> {
     shipFeedUrl: ship ? `${NOTICES}/ship-${ship}` : null,
     timeline: timelineFrom(page?.preLaunchTimeline?.timelineEntries ?? [], timeline),
     webcastUrl: webcastUrl(page?.webcasts),
+    webcastEmbedUrl: webcastEmbedUrl(page?.webcasts),
   }
   infoCache = { at: Date.now(), info }
   return info
