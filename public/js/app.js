@@ -1187,8 +1187,11 @@ function flightProgress(state, current) {
   const insertion = (flight.timeline || []).find((e) => /orbital insertion burn shutdown|insertion/i.test(e.label))?.t ?? w.from
   if (Number.isFinite(met) && met >= insertion && met < w.deorbit) {
     const period = orbitPeriodS()
-    const n = Math.floor((met - insertion) / period) + 1
-    const total = Math.max(n, Math.ceil((w.deorbit - insertion) / period))
+    // Laps between orbit insertion and the deorbit burn, to the nearest
+    // whole orbit (Flight 15: ~14.1 at 89.9 min, so "of ~14"). The few
+    // minutes of the last partial lap count as the final orbit.
+    const total = Math.max(1, Math.round((w.deorbit - insertion) / period))
+    const n = Math.min(total, Math.floor((met - insertion) / period) + 1)
     rows.push(['Orbit', `${n} <span>of ~${total}</span>`, `${(period / 60).toFixed(1)} min each`])
   }
   if (Number.isFinite(met) && Number.isFinite(w.landing)) {
