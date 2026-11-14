@@ -102,15 +102,19 @@ function pickShip(raw) {
   return ships.length === 1 ? ships[0][1] : null
 }
 
+/** Ship and booster from SpaceX's raw tracker JSON. */
+export function feedFromRaw(raw, fetchedAt = new Date()) {
+  const ship = pickShip(raw)
+  return { ship: ship?.current ? ship : null, booster: pickBooster(raw), fetchedAt }
+}
+
 export async function fetchShipTracker(signal) {
   const res = await fetch('/api/tracker', {
     signal,
     cache: 'no-store',
   })
   if (!res.ok) throw new Error(`SpaceX tracker returned ${res.status}`)
-  const raw = await res.json()
-  const ship = pickShip(raw)
-  return { ship: ship?.current ? ship : null, booster: pickBooster(raw), fetchedAt: new Date() }
+  return feedFromRaw(await res.json())
 }
 
 const STARLINK_TRAIL_S = 15 * 60
@@ -373,9 +377,12 @@ export function startTracker(onChange) {
     return true
   }
 
-  async function load() {
+  /** `pushed`: data from the live stream ({ raw, at }); otherwise fetch. */
+  async function load(pushed) {
     try {
-      const feed = await fetchShipTracker(controller.signal)
+      const feed = pushed
+        ? feedFromRaw(pushed.raw, pushed.at)
+        : await fetchShipTracker(controller.signal)
       state.booster = feed.booster
       const live = feed.ship ? feed : null
       if (live) {
@@ -431,23 +438,88 @@ export function startTracker(onChange) {
   const orbitId = setInterval(syncOrbit, 10 * 60_000)
   void load()
   void loadSharedTrail()
+  // Live stream (/api/stream): one connection per viewer, pushed only when
+  // SpaceX's data changes, instead of a request every couple of seconds.
+  // Falls back to polling where it isn't available.
+  let useStream = typeof EventSource === 'function'
+  let stream = null
+  let pushed = null
+  let streamHeardAt = 0
+  let streamFailures = 0
+
+  const closeStream = () => {
+    stream?.close()
+    stream = null
+  }
+  const openStream = () => {
+    if (!useStream || stream || document.hidden || controller.signal.aborted) return
+    streamHeardAt = Date.now()
+    stream = new EventSource('/api/stream')
+    stream.addEventListener('tracker', (e) => {
+      streamHeardAt = Date.now()
+      streamFailures = 0
+      try {
+        pushed = { raw: JSON.parse(e.data), at: new Date() }
+      } catch {
+        return
+      }
+      void load(pushed)
+    })
+    stream.addEventListener('ping', () => {
+      streamHeardAt = Date.now()
+      streamFailures = 0
+    })
+    // The browser reconnects by itself (the server ends each connection
+    // after a few minutes). Repeated failures with nothing heard: poll.
+    stream.onerror = () => {
+      streamFailures += 1
+      if (streamFailures >= 4) {
+        closeStream()
+        useStream = false
+      } else if (stream?.readyState === EventSource.CLOSED) {
+        // Refused outright (an error status, or no stream on this host):
+        // poll meanwhile and try the stream again in a minute.
+        closeStream()
+        setTimeout(openStream, 60_000)
+      }
+    }
+  }
+  const streamUp = () => useStream && stream?.readyState === EventSource.OPEN
+
+  // Each tick refreshes the page; with the stream up that needs no request
+  // (estimates and clocks move on locally between pushes).
   let pollId = null
+  const tick = () => {
+    if (stream && Date.now() - streamHeardAt > 45_000) {
+      // Silent for too long (pings come every 15 s): reconnect.
+      closeStream()
+      streamFailures += 1
+      openStream()
+    }
+    if (streamUp()) {
+      return pushed ? load(pushed) : load()
+    }
+    return load()
+  }
   const schedulePoll = () => {
     clearTimeout(pollId)
     if (controller.signal.aborted || document.hidden) return
     pollId = setTimeout(
-      () => void load().finally(schedulePoll),
-      positionSource === 'spacex' ? POLL_MS : IDLE_POLL_MS,
+      () => void tick().finally(schedulePoll),
+      streamUp() ? POLL_MS : positionSource === 'spacex' ? POLL_MS : IDLE_POLL_MS,
     )
   }
   const onVisibility = () => {
     if (document.hidden) {
       clearTimeout(pollId)
+      closeStream()
     } else {
+      openStream()
       void load().finally(schedulePoll)
     }
   }
   document.addEventListener('visibilitychange', onVisibility)
+  openStream()
   schedulePoll()
   const trailId = setInterval(() => {
     if (!document.hidden) void loadSharedTrail()
@@ -457,6 +529,7 @@ export function startTracker(onChange) {
     clearInterval(orbitId)
     controller.abort()
     clearTimeout(pollId)
+    closeStream()
     document.removeEventListener('visibilitychange', onVisibility)
     clearInterval(trailId)
   }
