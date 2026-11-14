@@ -367,14 +367,21 @@ export function createMap(container, { prelaunch = false } = {}) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, size.x, size.y)
     if (!showAll || !allDots || !allDots.length) return
+    // Violet, to tell them apart from the blue batch this flight deployed;
+    // nearly that marker's size (radius 6), a little smaller on the widest
+    // views so ten thousand of them don't carpet the map.
     const dark = document.documentElement.dataset.theme === 'dark'
-    ctx.fillStyle = dark ? 'rgba(147, 197, 253, 0.75)' : 'rgba(37, 99, 235, 0.6)'
+    ctx.fillStyle = dark ? 'rgba(196, 181, 253, 0.85)' : 'rgba(167, 139, 250, 0.85)'
+    ctx.strokeStyle = dark ? 'rgba(91, 33, 182, 0.9)' : 'rgba(109, 40, 217, 0.9)'
+    ctx.lineWidth = 1.25
     const b = map.getBounds()
     const west = b.getWest() - 2
     const east = b.getEast() + 2
     const south = b.getSouth() - 2
     const north = b.getNorth() + 2
-    const r = map.getZoom() >= 5 ? 1.6 : 1.1
+    const zoom = map.getZoom()
+    const r = zoom >= 3 ? 4.5 : zoom >= 2 ? 3.5 : 2.75
+    ctx.beginPath()
     for (let i = 0; i < allDots.length; i += 2) {
       const lat = allDots[i]
       if (lat < south || lat > north) continue
@@ -383,9 +390,12 @@ export function createMap(container, { prelaunch = false } = {}) {
         const x = lon + offset
         if (x < west || x > east) continue
         const p = map.latLngToContainerPoint([lat, x])
-        ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2)
+        ctx.moveTo(p.x + r, p.y)
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
       }
     }
+    ctx.fill()
+    ctx.stroke()
   }
   map.on('zoomstart', () => {
     allCanvas.style.visibility = 'hidden'

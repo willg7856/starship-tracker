@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": null,
   "outputDirectory": "public",
+  "fluid": true,
+  "functions": {
+    "api/stream.ts": {
+      "maxDuration": 300
+    }
+  },
   "git": {
     "deploymentEnabled": true
   },

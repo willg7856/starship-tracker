@@ -1386,7 +1386,13 @@ async function main() {
     if (Number.isFinite(ms)) setPlannedLiftoffMs(ms)
   }
   void refreshPlannedLiftoff()
-  const liftoffPoll = setInterval(() => void refreshPlannedLiftoff(), 20_000)
+  // Not in hidden tabs (each check is a request); catch up when shown.
+  const liftoffPoll = setInterval(() => {
+    if (!document.hidden) void refreshPlannedLiftoff()
+  }, 20_000)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void refreshPlannedLiftoff()
+  })
 
   const stop = startTracker((state) => {
     latest = state
