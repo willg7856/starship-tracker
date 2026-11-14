@@ -334,7 +334,8 @@ function renderShell(root) {
         <div class="section-inner">
           <div class="timeline-head">
             <h2>Flight timeline</h2>
-            <p>From SpaceX · all times approximate</p>
+            <p class="timeline-source">From SpaceX · all times approximate</p>
+            <p class="next-event next-event--monitor" aria-live="off" hidden></p>
           </div>
           <ol class="timeline-list"></ol>
         </div>
