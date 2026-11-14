@@ -1481,3 +1481,132 @@ html[data-theme='dark'] {
 .timeline-list li[data-state='current'] .tl-time::before {
   content: '✓ ';
 }
+
+/* ------------------------------------------------------------------
+ * Split view: stream on the left half, map on the right half, filling
+ * the screen under the fixed top bar. Wide screens only.
+ * ------------------------------------------------------------------ */
+.stage {
+  display: contents;
+}
+
+.split-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.split-toggle:hover {
+  border-color: var(--ink);
+}
+
+.split-toggle:focus-visible {
+  outline: 2px solid var(--ignition);
+  outline-offset: 2px;
+}
+
+.split-toggle.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+@media (max-width: 899px) {
+  .split-toggle {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  .app.split .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    height: calc(100vh - var(--topbar-h));
+    min-height: 480px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .app.split .livestream {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+    overflow: auto;
+  }
+
+  .app.split .livestream-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .app.split .livestream-grid {
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .app.split .livestream-slot[data-slot='1'] {
+    display: none;
+  }
+
+  .app.split .livestream-slot[data-slot='0'] {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+  }
+
+  /* Keep the video 16:9, centred in the half. */
+  .app.split .livestream-slot[data-slot='0'] {
+    justify-content: center;
+  }
+
+  .app.split .livestream-frame {
+    flex: none;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: calc(100% - 3.5rem);
+    margin: 0;
+  }
+
+  .app.split .livestream-head p {
+    display: none;
+  }
+
+  .app.split .livestream-form {
+    order: 2;
+    margin-top: 0.75rem;
+  }
+
+  .app.split .map-section {
+    min-height: 0;
+    border-bottom: 0;
+  }
+
+  .app.split .map-shell {
+    height: 100%;
+  }
+
+  .app.split .track-map,
+  .app.split .map-skeleton {
+    height: 100%;
+    min-height: 0;
+  }
+}
