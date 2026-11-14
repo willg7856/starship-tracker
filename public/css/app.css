@@ -1610,3 +1610,211 @@ html[data-theme='dark'] {
     min-height: 0;
   }
 }
+
+/* ------------------------------------------------------------------
+ * Fullscreen monitoring display: one screen, no page scrolling. Top bar
+ * with the live readouts, stream | map, and the flight timeline along
+ * the bottom (scrolls on its own).
+ * ------------------------------------------------------------------ */
+.monitor-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.monitor-toggle:hover {
+  background: #ff5a1f;
+  border-color: #ff5a1f;
+  color: #ffffff;
+}
+
+.monitor-toggle:focus-visible,
+.monitor-exit:focus-visible {
+  outline: 2px solid var(--ignition);
+  outline-offset: 2px;
+}
+
+.monitor-exit {
+  appearance: none;
+  align-self: center;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--nav-line);
+  background: transparent;
+  color: var(--nav-fg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.monitor-exit:hover {
+  border-color: #ff5a1f;
+  color: #ff7a47;
+}
+
+.monitor-exit[hidden] {
+  display: none;
+}
+
+html.monitoring,
+html.monitoring body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.app.monitor {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app.monitor .masthead,
+.app.monitor .telemetry,
+.app.monitor .footer,
+.app.monitor .livestream-head,
+.app.monitor .livestream-form {
+  display: none !important;
+}
+
+.app.monitor .stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+/* Stream fills its half; YouTube letterboxes inside. */
+.app.monitor .livestream {
+  background: #000;
+}
+
+.app.monitor .livestream-inner {
+  padding: 0;
+}
+
+.app.monitor .livestream-frame {
+  max-height: 100%;
+}
+
+.app.monitor .timeline {
+  flex: 0 0 auto;
+  height: 28vh;
+  height: 28dvh;
+  min-height: 150px;
+  padding: 0.6rem var(--masthead-pad-x) 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+.app.monitor .timeline .section-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: none;
+}
+
+.app.monitor .timeline-head {
+  margin-bottom: 0.4rem;
+}
+
+.app.monitor .timeline-head h2 {
+  font-size: 1rem;
+}
+
+.app.monitor .timeline-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.app.monitor .timeline-list li {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+/* Narrow screens: stream, map and timeline stacked, still one screen. */
+@media (max-width: 899px) {
+  .app.monitor .stage {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app.monitor .livestream {
+    flex: none;
+  }
+
+  .app.monitor .livestream-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app.monitor .livestream-slot[data-slot='1'] {
+    display: none;
+  }
+
+  .app.monitor .map-section {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .app.monitor .map-shell,
+  .app.monitor .track-map {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .app.monitor .timeline {
+    height: 24dvh;
+    min-height: 120px;
+  }
+
+  .app.monitor .timeline-head p {
+    display: none;
+  }
+}
+
+/* Compact top bar while monitoring on small screens. */
+@media (max-width: 720px) {
+  html.monitoring .topbar .powered-by {
+    display: none;
+  }
+
+  html.monitoring .topbar-inner {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  html.monitoring .topbar-metrics {
+    gap: 0.15rem 0.85rem;
+    align-items: center;
+  }
+
+  html.monitoring .topbar .mission-clock {
+    font-size: 1.3rem;
+  }
+
+  html.monitoring .topbar .topbar-metric-value {
+    font-size: 1.15rem;
+  }
+
+  html.monitoring .topbar .status-line {
+    font-size: 0.68rem;
+  }
+
+  html.monitoring .monitor-exit {
+    padding: 0.2rem 0.5rem;
+  }
+}

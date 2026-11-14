@@ -4,7 +4,7 @@
  * (the ship's own catalogue entry, or SpaceX's orbit for the Starlink batch
  * the ship deployed); without one, a planned orbit is modelled from the launch
  * site, SpaceX's T-0 and its flight timeline. SGP4 turns either into a fix
- * shaped like SpaceX's tracker data, so the map, readouts and charts work
+ * shaped like SpaceX's tracker data, so the map and readouts work
  * unchanged. Fixes are only produced between engine cutoff and the deorbit
  * burn, when the ship really is on that orbit.
  */

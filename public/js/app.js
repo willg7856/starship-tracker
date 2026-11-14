@@ -1,4 +1,3 @@
-import { drawTelemetryCharts, recordTelemetrySample } from './charts.js'
 import { distanceAlongTrailKm, loadLiveTrail } from './trail.js'
 import { createMap } from './map.js'
 import {
@@ -65,7 +64,6 @@ const MOVE_RANGE_KM = 0.15
 const LIFTOFF_AT_KEY = flightStorageKey('liftoff-ms')
 const LANDED_ELAPSED_KEY = flightStorageKey('landed-elapsed-s')
 const ALTITUDE_ZERO_KEY = flightStorageKey('altitude-zero-s')
-let chartsPainted = false
 let liftoffAtMs = readLiftoffAt()
 let liftoffConfirmed = liftoffAtMs != null
 let sawOnPad = false
@@ -191,6 +189,7 @@ function renderShell(root) {
               <span class="topbar-metric-value" data-live="speed">— <span>km/h</span></span>
             </div>
             <p class="status-line" data-state="loading">Updated —</p>
+            <button type="button" class="monitor-exit" hidden>Exit</button>
           </div>
         </div>
       </header>
@@ -212,6 +211,7 @@ function renderShell(root) {
               Watch
             </button>
             <button type="button" class="split-toggle" aria-pressed="false" title="Stream on the left, map on the right">Split view</button>
+            <button type="button" class="monitor-toggle" title="One-screen monitoring display: stream, map and flight timeline">Fullscreen</button>
             <button type="button" class="theme-toggle">Dark</button>
             ${
               flight.webcastUrl
@@ -301,16 +301,6 @@ function renderShell(root) {
             </div>
           </div>
           <dl class="telemetry-grid"></dl>
-          <div class="telemetry-charts">
-            <figure class="telem-chart">
-              <figcaption>Altitude</figcaption>
-              <canvas data-chart="altitude" aria-label="Altitude over time"></canvas>
-            </figure>
-            <figure class="telem-chart">
-              <figcaption>Speed <span>km/h</span></figcaption>
-              <canvas data-chart="speed" aria-label="Speed over time"></canvas>
-            </figure>
-          </div>
         </div>
       </section>
 
@@ -343,7 +333,6 @@ function renderShell(root) {
 
   document.querySelector('.theme-toggle').addEventListener('click', () => {
     setTheme(getTheme() === 'dark' ? 'light' : 'dark')
-    drawTelemetryCharts()
   })
   setTheme(getTheme())
 
@@ -440,6 +429,51 @@ function renderShell(root) {
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
   }
   splitBtn.addEventListener('click', () => setSplit(!appEl.classList.contains('split')))
+
+  // Fullscreen monitoring display: stream + map side by side, flight
+  // timeline along the bottom, no page scrolling.
+  const monitorExit = document.querySelector('.monitor-exit')
+  let splitBeforeMonitor = false
+  const relayout = () =>
+    requestAnimationFrame(() => {
+      syncTopbar()
+      window.dispatchEvent(new Event('resize'))
+    })
+  const enterMonitor = async () => {
+    if (appEl.classList.contains('monitor')) return
+    splitBeforeMonitor = appEl.classList.contains('split')
+    appEl.classList.add('monitor', 'split')
+    document.documentElement.classList.add('monitoring')
+    monitorExit.hidden = false
+    if (livestream.hidden) setLivestreamOpen(true)
+    window.scrollTo(0, 0)
+    try {
+      if (document.fullscreenEnabled && !document.fullscreenElement) {
+        await document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      }
+    } catch {
+      /* not allowed (e.g. iPhone): the one-screen layout still applies */
+    }
+    relayout()
+  }
+  const exitMonitor = () => {
+    if (!appEl.classList.contains('monitor')) return
+    appEl.classList.remove('monitor')
+    if (!splitBeforeMonitor) appEl.classList.remove('split')
+    document.documentElement.classList.remove('monitoring')
+    monitorExit.hidden = true
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    relayout()
+  }
+  document.querySelector('.monitor-toggle').addEventListener('click', () => void enterMonitor())
+  monitorExit.addEventListener('click', exitMonitor)
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) exitMonitor()
+    else relayout()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') exitMonitor()
+  })
   try {
     if (localStorage.getItem(SPLIT_KEY) === '1') setSplit(true, { remember: false })
   } catch {
@@ -504,7 +538,6 @@ function renderShell(root) {
   document.fonts?.ready?.then(syncTopbar).catch(() => {})
   window.addEventListener('resize', () => {
     syncTopbar()
-    drawTelemetryCharts()
   })
 }
 
@@ -988,10 +1021,6 @@ function renderTelemetry(state) {
     <div><dt>Downrange</dt><dd>${downrange} <span>${rangeNote}</span></dd></div>
     <div><dt>Traveled</dt><dd>${traveled} <span>${traveledNote}</span></dd></div>
   `
-  if (recordTelemetrySample(current) || !chartsPainted) {
-    chartsPainted = true
-    requestAnimationFrame(() => drawTelemetryCharts())
-  }
 }
 
 function renderStatus(state, nowMs) {
