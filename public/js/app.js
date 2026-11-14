@@ -233,6 +233,10 @@ function renderShell(root) {
                 ? `<a class="monitor-x" href="${flight.webcastUrl}" target="_blank" rel="noreferrer" hidden>SpaceX on X ↗</a>`
                 : ''
             }
+            <label class="monitor-stream" hidden>
+              <span class="visually-hidden">Stream</span>
+              <select aria-label="Choose a stream"></select>
+            </label>
             <button type="button" class="monitor-theme" hidden aria-label="Switch theme">Dark</button>
             <button type="button" class="monitor-exit" hidden title="Exit Fullscreen (Esc)">Exit</button>
           </div>
@@ -284,8 +288,9 @@ function renderShell(root) {
                     : "Live coverage."
                 }
                 <a href="${flight.webcastUrl || SPACEX_WEBCAST}" target="_blank" rel="noreferrer">Open SpaceX's webcast on X ↗</a>.
-                Paste a YouTube or Twitch link to swap streams.
+                Pick another stream below, or paste a YouTube or Twitch link.
               </p>
+              <div class="stream-choices" role="group" aria-label="Choose a stream"></div>
             </div>
             <button type="button" class="livestream-close">Close</button>
           </div>
@@ -436,7 +441,117 @@ function renderShell(root) {
     showSlotNote(slot, '')
   }
 
+  // Stream picker: SpaceX's webcast plus live Starship coverage found on
+  // YouTube (/api/streams). The choice is remembered for this flight.
+  const CHOICE_KEY = flightStorageKey('stream-choice')
+  const choicesEl = livestream.querySelector('.stream-choices')
+  const monitorSelect = document.querySelector('.monitor-stream select')
+  let liveStreams = []
+  let choice = (() => {
+    try {
+      return localStorage.getItem(CHOICE_KEY) || ''
+    } catch {
+      return ''
+    }
+  })()
+  const ytEmbed = (id) =>
+    `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1`
+  const streamOptions = () => {
+    const opts = []
+    if (flight.webcastEmbedUrl) opts.push({ key: 'spacex', label: 'SpaceX', title: "SpaceX's official webcast", embed: flight.webcastEmbedUrl })
+    const seen = {}
+    for (const st of liveStreams) {
+      seen[st.channel] = (seen[st.channel] || 0) + 1
+      const base = st.allDay ? `${st.channel} · pad cam` : st.channel
+      opts.push({
+        key: st.id,
+        label: seen[st.channel] > 1 && !st.allDay ? `${base} ${seen[st.channel]}` : base,
+        title: `${st.title}${st.viewers ? ` (${st.viewers.toLocaleString()} watching)` : ''}`,
+        embed: ytEmbed(st.id),
+      })
+    }
+    // A remembered stream that is no longer listed stays selectable.
+    if (choice && choice !== 'spacex' && !opts.some((o) => o.key === choice)) {
+      opts.push({ key: choice, label: 'Previous stream', title: 'The stream you picked earlier', embed: ytEmbed(choice) })
+    }
+    return opts
+  }
+  const currentKey = () => {
+    const custom = slots[0].querySelector('input').value.trim()
+    if (custom) return 'custom'
+    return choice || (flight.webcastEmbedUrl ? 'spacex' : liveStreams[0]?.id || '')
+  }
+  const renderChoices = () => {
+    const opts = streamOptions()
+    const active = currentKey()
+    choicesEl.innerHTML = opts
+      .map(
+        (o) =>
+          `<button type="button" data-stream="${escapeHtml(o.key)}" aria-pressed="${o.key === active}" title="${escapeHtml(o.title)}">${escapeHtml(o.label)}</button>`,
+      )
+      .join('')
+    choicesEl.hidden = opts.length < 2
+    if (monitorSelect) {
+      monitorSelect.innerHTML =
+        opts.map((o) => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.label)}</option>`).join('') +
+        (active === 'custom' ? '<option value="custom">Your link</option>' : '')
+      monitorSelect.value = active
+      monitorSelect.closest('.monitor-stream').classList.toggle('single', opts.length < 2)
+    }
+  }
+  const pickStream = (key) => {
+    const opt = streamOptions().find((o) => o.key === key)
+    if (!opt) return
+    choice = key
+    try {
+      localStorage.setItem(CHOICE_KEY, key)
+    } catch {
+      /* ignore */
+    }
+    slots[0].querySelector('input').value = ''
+    rememberStreams()
+    playSlot(slots[0], opt.embed)
+    renderChoices()
+  }
+  choicesEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-stream]')
+    if (btn) pickStream(btn.dataset.stream)
+  })
+  monitorSelect?.addEventListener('change', () => {
+    if (monitorSelect.value !== 'custom') pickStream(monitorSelect.value)
+  })
+  let streamsLoadedAt = 0
+  const loadStreams = async () => {
+    if (Date.now() - streamsLoadedAt < 4 * 60_000) return
+    streamsLoadedAt = Date.now()
+    try {
+      const res = await fetch('/api/streams')
+      if (!res.ok) return
+      const body = await res.json()
+      if (Array.isArray(body?.streams)) liveStreams = body.streams
+    } catch {
+      /* keep the last list */
+    }
+    renderChoices()
+    // No official webcast to show: start the most-watched live stream.
+    const frame = slots[0].querySelector('iframe')
+    const src = frame.getAttribute('src')
+    if (!livestream.hidden && (!src || src === 'about:blank') && !slots[0].querySelector('input').value.trim()) {
+      const first = streamOptions()[0]
+      if (first) {
+        playSlot(slots[0], first.embed)
+        renderChoices()
+      }
+    }
+  }
+  renderChoices()
+  // Refresh the list now and then while the panel is open.
+  setInterval(() => {
+    if (!livestream.hidden && !document.hidden) void loadStreams()
+  }, 5 * 60_000)
+
   const startSlots = () => {
+    void loadStreams()
     slots.forEach((slot, index) => {
       const frame = slot.querySelector('iframe')
       const assigned = frame.getAttribute('src')
@@ -451,7 +566,8 @@ function renderShell(root) {
         showSlotNote(slot, 'That link can’t be embedded. Use a YouTube or Twitch URL.')
         return
       }
-      const fallback = defaultEmbed(index)
+      const picked = index === 0 && choice ? streamOptions().find((o) => o.key === choice) : null
+      const fallback = picked?.embed || defaultEmbed(index)
       if (fallback) playSlot(slot, fallback)
       else showSlotNote(slot, 'No webcast published yet. Paste a YouTube or Twitch link to watch one.')
     })
@@ -540,6 +656,7 @@ function renderShell(root) {
     void holdWakeLock()
     wakeCursor()
     document.querySelector('.monitor-x')?.removeAttribute('hidden')
+    document.querySelector('.monitor-stream')?.removeAttribute('hidden')
     if (livestream.hidden) setLivestreamOpen(true)
     window.scrollTo(0, 0)
     try {
@@ -560,6 +677,7 @@ function renderShell(root) {
     clearTimeout(idleTimer)
     dropWakeLock()
     document.querySelector('.monitor-x')?.setAttribute('hidden', '')
+    document.querySelector('.monitor-stream')?.setAttribute('hidden', '')
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
     relayout()
   }
@@ -612,8 +730,13 @@ function renderShell(root) {
       }
       playSlot(slot, embed)
       rememberStreams()
+      renderChoices()
     })
     slot.querySelector('.livestream-reset')?.addEventListener('click', () => {
+      if (flight.webcastEmbedUrl) {
+        pickStream('spacex')
+        return
+      }
       slot.querySelector('input').value = ''
       playSlot(slot, defaultEmbed(0))
       rememberStreams()
@@ -639,6 +762,10 @@ function renderShell(root) {
   window.addEventListener('resize', () => {
     syncTopbar()
   })
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
 
 function loadSavedStreams() {

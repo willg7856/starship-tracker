@@ -2303,3 +2303,80 @@ html:not([data-theme='dark']) .masthead-title-meta {
 .watch-toggle:not(:hover):not(.active) {
   color: #0b0d0f;
 }
+
+/* Stream picker (Watch panel). */
+.stream-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.stream-choices[hidden] {
+  display: none;
+}
+
+.stream-choices button {
+  appearance: none;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.stream-choices button:hover {
+  border-color: #ff5a1f;
+  color: var(--ink);
+}
+
+.stream-choices button[aria-pressed='true'] {
+  border-color: #ff5a1f;
+  background: #ff5a1f;
+  color: #0b0d0f;
+}
+
+/* Stream picker in the Fullscreen top bar. */
+.monitor-stream {
+  align-self: center;
+  display: inline-flex;
+}
+
+.monitor-stream[hidden] {
+  display: none;
+}
+
+.monitor-stream select {
+  appearance: none;
+  max-width: 15rem;
+  padding: 0.3rem 1.6rem 0.3rem 0.7rem;
+  border: 1px solid var(--nav-line);
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ff7a47'/%3E%3C/svg%3E")
+    no-repeat right 0.55rem center;
+  color: var(--nav-fg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.monitor-stream select:hover,
+.monitor-stream select:focus-visible {
+  border-color: #ff5a1f;
+}
+
+.monitor-stream option {
+  background: #0b0d0f;
+  color: #fafaf7;
+  text-transform: none;
+}
