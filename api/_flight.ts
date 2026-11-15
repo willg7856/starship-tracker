@@ -219,6 +219,38 @@ async function hasTrajectory(flight: number, ship: number): Promise<boolean> {
   }
 }
 
+/**
+ * Space Notices' flown-track file for the flight. It has been named after
+ * the ship ("…-flight-14-ship-41-trajectory") and, from Flight 15, after the
+ * flight alone ("…-flight-15-predicted-trajectory"). Use whichever exists.
+ */
+const trajectoryCache = new Map<string, { at: number; url: string | null }>()
+async function resolveTrajectoryUrl(flight: number, ship: number | null): Promise<string | null> {
+  const key = `${flight}/${ship}`
+  const hit = trajectoryCache.get(key)
+  if (hit && Date.now() - hit.at < (hit.url ? 6 * 3600_000 : 5 * 60_000)) return hit.url
+  const candidates = [
+    ship ? `${NOTICES}/trajectory/launch-starship-flight-${flight}-ship-${ship}-trajectory` : null,
+    `${NOTICES}/trajectory/launch-starship-flight-${flight}-predicted-trajectory`,
+  ].filter((u): u is string => !!u)
+  let url: string | null = null
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, { headers: { Accept: 'application/json' } })
+      if (res.ok) {
+        url = candidate
+        break
+      }
+    } catch {
+      /* try the next name */
+    }
+  }
+  // Nothing found yet: keep the ship-named URL so behaviour is unchanged.
+  if (!url && ship) url = candidates[0]
+  trajectoryCache.set(key, { at: Date.now(), url })
+  return url
+}
+
 /** Probe Space Notices for the ship number on this flight's trajectory. */
 const shipCache = new Map<number, { at: number; ship: number | null }>()
 async function shipFromNotices(flight: number): Promise<number | null> {
@@ -352,9 +384,7 @@ export async function discoverFlight(): Promise<FlightInfo | null> {
         ? 'splashdown'
         : 'landing'
 
-  const trajectoryUrl = ship
-    ? `${NOTICES}/trajectory/launch-starship-flight-${pick.flight}-ship-${ship}-trajectory`
-    : null
+  const trajectoryUrl = await resolveTrajectoryUrl(pick.flight, ship)
 
   const info: FlightInfo = {
     flight: pick.flight,

@@ -1526,11 +1526,13 @@ function renderSummary(state, nowMs) {
   const trail = (state.mapTrail || state.liveTrail || []).filter(
     (p) => p && Number.isFinite(p.gps_time) && (Number.isFinite(p.altitude) || Array.isArray(p.r_ecef)),
   )
-  let maxAlt = null
-  for (const p of trail) if (Number.isFinite(p.altitude) && (maxAlt == null || p.altitude > maxAlt)) maxAlt = p.altitude
+  let maxAlt = state.summaryStats?.maxAlt ?? null
+  if (maxAlt == null) {
+    for (const p of trail) if (Number.isFinite(p.altitude) && (maxAlt == null || p.altitude > maxAlt)) maxAlt = p.altitude
+  }
   // Top speed: a high percentile of fix-to-fix speeds, so one noisy pair
   // can't set the record.
-  const { distanceKm: distance, topSpeed } = pathStats(trail)
+  const { distanceKm: distance, topSpeed } = state.summaryStats ?? pathStats(trail)
 
   const w = orbitWindow()
   const insertion = (flight.timeline || []).find((e) => /insertion/i.test(e.label))?.t ?? w.from
@@ -1709,6 +1711,33 @@ function isPostFlight(nowMs = Date.now()) {
   return nowMs > planned + (landing + POST_FLIGHT_AFTER_S) * 1000
 }
 
+/**
+ * Space Notices' flown track ([lon, lat, alt] per SpaceX fix) up to the
+ * moment the ship reached the pad; later samples on the tower are dropped.
+ */
+function realTrack(coordinates, pad) {
+  if (!Array.isArray(coordinates)) return []
+  const out = []
+  let flown = false
+  for (const c of coordinates) {
+    if (!Array.isArray(c)) continue
+    const [lon, lat, alt] = c
+    if (![lon, lat, alt].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180) continue
+    if (alt < -500 || alt > 600_000) continue
+    out.push({ latitude: lat, longitude: lon, altitude: alt })
+    if (alt > 1000) flown = true
+    if (
+      flown &&
+      pad &&
+      alt < 300 &&
+      haversineKm(lat, lon, pad.lat, pad.lon) < 1.5
+    ) {
+      break
+    }
+  }
+  return flown ? out : []
+}
+
 async function mainPostFlight(root) {
   renderShell(root)
   const app = document.querySelector('.app')
@@ -1738,9 +1767,12 @@ async function mainPostFlight(root) {
     /* the summary still renders without the map */
   }
   // One-time loads: the published orbit and SpaceX's final position.
-  const [, feed] = await Promise.all([
+  const [, feed, notices] = await Promise.all([
     refreshOrbit().catch(() => false),
     fetchShipTracker(new AbortController().signal).catch(() => null),
+    fetch('/api/ship-trail')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
   ])
 
   // The real liftoff moment from SpaceX's own clock on the final fix (its
@@ -1775,19 +1807,83 @@ async function mainPostFlight(root) {
       if (fix && Number.isFinite(fix.latitude) && Number.isFinite(fix.longitude)) path.push(fix)
     }
   }
-  if (finalFix) path.push(finalFix)
+  // The real flown track: SpaceX's fixes as kept by Space Notices, from
+  // orbit to the catch. Joined to the modelled ascent where it begins.
+  const modelOrbit = path.filter((p) => p.mission_time >= w.from && p.mission_time <= w.to)
+  const real = realTrack(notices?.coordinates, meta.launchPad)
+  let summaryStats = null
+  let drawn = path
+  if (real.length > 1 && path.length > 1) {
+    // When the real track starts: it ends at the catch, and its orbital
+    // part was flown at ~7.35 km/s over the ground. Match near that time
+    // only (the ground track passes the same places again a day later).
+    let orbitalKm = 0
+    for (let i = 1; i < real.length; i++) {
+      if (real[i].altitude < 120_000) break
+      const a = fixEcef(real[i - 1])
+      const b = fixEcef(real[i])
+      orbitalKm += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / 1000
+    }
+    const expectStartMet = w.to - orbitalKm / 7.35
+    const startPos = fixEcef(real[0])
+    let k = -1
+    let bestKm = Infinity
+    for (let i = 0; i < path.length; i++) {
+      const met = path[i].mission_time
+      if (Number.isFinite(met) && Math.abs(met - expectStartMet) > 45 * 60) continue
+      const pos = fixEcef(path[i])
+      if (!pos) continue
+      const km = Math.hypot(pos[0] - startPos[0], pos[1] - startPos[1], pos[2] - startPos[2]) / 1000
+      if (km < bestKm) {
+        bestKm = km
+        k = i
+      }
+    }
+    // Where the real track starts on the modelled path (else from the pad).
+    const before = bestKm < 300 ? path.slice(0, k + 1) : path.slice(0, 1)
+    const startGps = before[before.length - 1].gps_time
+    const endGps = Number.isFinite(t0) ? (t0 + w.landing * 1000) / 1000 - GPS_TO_UNIX_OFFSET : startGps + real.length * 20
+    const realKm = []
+    let total = 0
+    for (let i = 0; i < real.length; i++) {
+      if (i) {
+        const a = fixEcef(real[i - 1])
+        const b = fixEcef(real[i])
+        total += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / 1000
+      }
+      realKm.push(total)
+    }
+    // Times only order the points for drawing; spread them by distance.
+    const timed = real.map((p, i) => ({
+      ...p,
+      gps_time: startGps + ((endGps - startGps) * (i + 1)) / (real.length + 1),
+    }))
+    drawn = [...before, ...timed]
+    if (finalFix) drawn.push(finalFix)
+    let maxAlt = 0
+    for (const p of [...before, ...real]) if (p.altitude > maxAlt) maxAlt = p.altitude
+    summaryStats = {
+      distanceKm: pathStats(before).distanceKm + total,
+      // SpaceX's feed carries no speed; orbital speed from the published orbit.
+      topSpeed: pathStats(modelOrbit).topSpeed,
+      maxAlt,
+    }
+  } else if (finalFix) {
+    drawn = [...path, finalFix]
+  }
 
   const state = {
     ship: finalFix ? { current: finalFix } : null,
     positionSource: finalFix ? 'spacex' : null,
-    mapTrail: path,
+    mapTrail: drawn,
+    summaryStats,
     starlink: Number.isFinite(t0) ? starlinkFixAt(t0 + w.from * 1000 + 3600_000) : null,
   }
   renderSummary(state, Date.now())
 
-  if (path.length > 1) {
+  if (drawn.length > 1) {
     const mapApi = ensureMap(null, false)
-    mapApi.update({ ship: state.ship, liveTrail: path, plannedPath: null, booster: null, starlink: null })
+    mapApi.update({ ship: state.ship, liveTrail: drawn, plannedPath: null, booster: null, starlink: null })
     // Frame the whole flown path.
     document.querySelector('.map-camera-controls [data-camera="wide"]')?.click()
   } else {
