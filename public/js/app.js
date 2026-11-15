@@ -8,9 +8,9 @@ import {
   setPlannedLiftoffMs,
 } from './path.js'
 import { fetchFlightInfo, flight, flightLabel, flightStorageKey, missionPageUrl } from './flight.js'
-import { startTracker } from './tracker.js'
+import { fetchShipTracker, startTracker } from './tracker.js'
 import { renderTimeline, setupTimeline } from './timeline.js'
-import { orbitPeriodS, orbitSource, orbitWindow, starlinkFixAt } from './orbit.js'
+import { orbitFixAt, orbitPeriodS, orbitSource, orbitWindow, refreshOrbit, starlinkFixAt } from './orbit.js'
 import {
   GPS_TO_UNIX_OFFSET,
   MAX_MISSION_S,
@@ -1544,7 +1544,7 @@ function renderSummary(state, nowMs) {
       dateStyle: 'medium',
       timeStyle: 'short',
     })
-    rows.push(['Liftoff', when, meta.actualLiftoffMs ? 'seen live' : "SpaceX's T-0"])
+    rows.push(['Liftoff', when, meta.actualLiftoffMs ? "SpaceX's mission clock" : "SpaceX's T-0"])
   }
   if (Number.isFinite(landingS)) rows.push(['Flight time', formatFlightTime(landingS), `T+${formatClock(landingS)}`])
   if (Number.isFinite(maxAlt) && maxAlt > 1000) rows.push(['Highest point', `${Math.round(maxAlt / 1000).toLocaleString()} km`, 'tracked'])
@@ -1692,8 +1692,115 @@ function ensureMap(mapApi, prelaunch) {
   return next
 }
 
+/**
+ * Post-flight mode: from 30 min after SpaceX's planned landing until SpaceX
+ * lists the next flight. Live tracking, the stream and every background
+ * refresh stop; the page shows the flight summary and the flown path,
+ * built from one load of the orbit and SpaceX's final fix (all CDN-cached).
+ * ?live keeps the live page (for checking).
+ */
+const POST_FLIGHT_AFTER_S = 30 * 60
+
+function isPostFlight(nowMs = Date.now()) {
+  if (/[?&]live\b/.test(window.location.search)) return false
+  const planned = Date.parse(flight.plannedLiftoff ?? '')
+  const landing = flight.landingMissionTime
+  if (!Number.isFinite(planned) || !Number.isFinite(landing) || flight.paused) return false
+  return nowMs > planned + (landing + POST_FLIGHT_AFTER_S) * 1000
+}
+
+async function mainPostFlight(root) {
+  renderShell(root)
+  const app = document.querySelector('.app')
+  app.classList.add('post-flight')
+  // Live-only parts of the page.
+  for (const sel of [
+    '.topbar-metrics',
+    '.masthead-side .estimate-note',
+    '.masthead-side .next-event',
+    '.watch-toggle',
+    '.monitor-toggle',
+    '.livestream',
+    '.timeline',
+    '.telemetry',
+  ]) {
+    document.querySelectorAll(sel).forEach((el) => el.remove())
+  }
+  const title = document.querySelector('.masthead-title')
+  if (title?.firstChild?.nodeType === Node.TEXT_NODE) title.firstChild.textContent = 'Starship Flight Summary '
+  const sub = document.querySelector('.masthead-sub')
+  if (sub) sub.textContent = 'This flight is over. Live tracking will return for the next flight.'
+  document.title = `${flightLabel ? `${flightLabel} summary` : 'Flight summary'} — Beyond Stage Zero`
+
+  try {
+    await loadTrack({ hazards: false })
+  } catch {
+    /* the summary still renders without the map */
+  }
+  // One-time loads: the published orbit and SpaceX's final position.
+  const [, feed] = await Promise.all([
+    refreshOrbit().catch(() => false),
+    fetchShipTracker(new AbortController().signal).catch(() => null),
+  ])
+
+  // The real liftoff moment from SpaceX's own clock on the final fix (its
+  // GPS time minus mission time; GPS runs 18 s ahead of UTC). SpaceX's
+  // website may show the window opening instead.
+  const finalFix = feed?.ship?.current ?? null
+  if (
+    finalFix &&
+    Number.isFinite(finalFix.gps_time) &&
+    Number.isFinite(finalFix.mission_time) &&
+    finalFix.mission_time > 0
+  ) {
+    const liftoff = (finalFix.gps_time - finalFix.mission_time + GPS_TO_UNIX_OFFSET - GPS_LEAP_SECONDS) * 1000
+    const planned = getMeta().plannedLiftoffMs
+    if (!Number.isFinite(planned) || Math.abs(liftoff - planned) < 6 * 3600_000) setActualLiftoffMs(liftoff)
+  }
+  const meta = getMeta()
+  const t0 = meta.actualLiftoffMs ?? meta.plannedLiftoffMs
+  const w = orbitWindow()
+  const path = []
+  if (Number.isFinite(t0)) {
+    if (meta.launchPad) {
+      path.push({
+        gps_time: t0 / 1000 - GPS_TO_UNIX_OFFSET,
+        latitude: meta.launchPad.lat,
+        longitude: meta.launchPad.lon,
+        altitude: 0,
+      })
+    }
+    for (let met = w.from; met <= w.landing; met += 30) {
+      const fix = orbitFixAt(t0 + met * 1000)
+      if (fix && Number.isFinite(fix.latitude) && Number.isFinite(fix.longitude)) path.push(fix)
+    }
+  }
+  if (finalFix) path.push(finalFix)
+
+  const state = {
+    ship: finalFix ? { current: finalFix } : null,
+    positionSource: finalFix ? 'spacex' : null,
+    mapTrail: path,
+    starlink: Number.isFinite(t0) ? starlinkFixAt(t0 + w.from * 1000 + 3600_000) : null,
+  }
+  renderSummary(state, Date.now())
+
+  if (path.length > 1) {
+    const mapApi = ensureMap(null, false)
+    mapApi.update({ ship: state.ship, liveTrail: path, plannedPath: null, booster: null, starlink: null })
+    // Frame the whole flown path.
+    document.querySelector('.map-camera-controls [data-camera="wide"]')?.click()
+  } else {
+    document.querySelector('.map-section')?.remove()
+  }
+}
+
 async function main() {
   const root = document.getElementById('app')
+  if (isPostFlight()) {
+    await mainPostFlight(root)
+    return
+  }
   renderShell(root)
 
   try {
@@ -1783,6 +1890,7 @@ async function main() {
   })
 
   setInterval(() => {
+    if (isPostFlight()) scheduleReload()
     if (!latest) return
     tick(latest)
   }, 250)

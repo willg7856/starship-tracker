@@ -107,10 +107,10 @@ function mergeRings(polygonClipping, rings) {
   }
 }
 
-export async function loadTrack() {
+export async function loadTrack({ hazards = true } = {}) {
   if (track) return meta
   track = seedFromFlight()
-  track.noticePolygons = await loadHazards()
+  track.noticePolygons = hazards ? await loadHazards() : []
   const first = track.points?.[0]
   meta = {
     vehicle: track.vehicle || 'Starship',
