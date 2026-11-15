@@ -2478,3 +2478,22 @@ html:not([data-theme='dark']) .masthead-title-meta {
 .app.monitor .summary {
   display: none !important;
 }
+
+/* Post-flight mode: summary and the flown path only. */
+.post-flight .map-camera-controls [data-starlink],
+.post-flight .map-camera-controls [data-all-starlinks],
+.post-flight .map-camera-controls [data-hazards] {
+  display: none !important;
+}
+
+.post-flight .summary {
+  border-bottom: 0;
+}
+
+.post-flight .summary-head h2 {
+  display: none;
+}
+
+.post-flight .summary-outcome {
+  margin-top: 0;
+}
