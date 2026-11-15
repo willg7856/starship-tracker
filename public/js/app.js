@@ -481,16 +481,13 @@ function renderShell(root) {
         embed: ytEmbed(st.id),
       })
     }
-    // A remembered stream that is no longer listed stays selectable.
-    if (choice && choice !== 'spacex' && !opts.some((o) => o.key === choice)) {
-      opts.push({ key: choice, label: 'Previous stream', title: 'The stream you picked earlier', embed: ytEmbed(choice) })
-    }
     return opts
   }
   const currentKey = () => {
     const custom = slots[0].querySelector('input').value.trim()
     if (custom) return 'custom'
-    return choice || (flight.webcastEmbedUrl ? 'spacex' : liveStreams[0]?.id || '')
+    const listed = streamOptions().some((o) => o.key === choice)
+    return (listed && choice) || (flight.webcastEmbedUrl ? 'spacex' : liveStreams[0]?.id || '')
   }
   const renderChoices = () => {
     const opts = streamOptions()
@@ -532,16 +529,43 @@ function renderShell(root) {
     if (monitorSelect.value !== 'custom') pickStream(monitorSelect.value)
   })
   let streamsLoadedAt = 0
+  let streamsKnown = false
+  const forgetChoice = () => {
+    choice = ''
+    try {
+      localStorage.removeItem(CHOICE_KEY)
+    } catch {
+      /* ignore */
+    }
+  }
   const loadStreams = async () => {
     if (Date.now() - streamsLoadedAt < 4 * 60_000) return
     streamsLoadedAt = Date.now()
     try {
       const res = await fetch('/api/streams')
-      if (!res.ok) return
-      const body = await res.json()
-      if (Array.isArray(body?.streams)) liveStreams = body.streams
+      if (res.ok) {
+        const body = await res.json()
+        if (Array.isArray(body?.streams)) liveStreams = body.streams
+      }
     } catch {
       /* keep the last list */
+    }
+    streamsKnown = true
+    // A stream picked earlier that is no longer live: back to SpaceX's
+    // webcast (or whatever plays by default).
+    const slot0 = slots[0]
+    const frame0 = slot0.querySelector('iframe')
+    const custom = slot0.querySelector('input').value.trim()
+    if (choice && choice !== 'spacex' && !liveStreams.some((st) => st.id === choice)) {
+      const src = frame0.getAttribute('src') || ''
+      const replace = src.includes(choice) || !src || src === 'about:blank'
+      forgetChoice()
+      if (!livestream.hidden && !custom && replace && defaultEmbed(0)) playSlot(slot0, defaultEmbed(0))
+    }
+    // A picked stream still live, waiting for this list to start.
+    if (!livestream.hidden && !custom && choice && choice !== 'spacex') {
+      const src0 = frame0.getAttribute('src')
+      if (!src0 || src0 === 'about:blank') playSlot(slot0, ytEmbed(choice))
     }
     renderChoices()
     // No official webcast to show: start the most-watched live stream.
@@ -577,6 +601,8 @@ function renderShell(root) {
         showSlotNote(slot, 'That link can’t be embedded. Use a YouTube or Twitch URL.')
         return
       }
+      // A YouTube pick plays only once the live list confirms it is still on.
+      if (index === 0 && choice && choice !== 'spacex' && !streamsKnown) return
       const picked = index === 0 && choice ? streamOptions().find((o) => o.key === choice) : null
       const fallback = picked?.embed || defaultEmbed(index)
       if (fallback) playSlot(slot, fallback)
